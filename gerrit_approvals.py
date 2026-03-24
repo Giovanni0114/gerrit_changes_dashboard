@@ -145,7 +145,9 @@ def build_table(
                 seen.add(key)
 
                 if appr.get("type", "?") == "SUBM":
-                    row_style = "on #06402B"
+                    row_style = "on #019424"
+                elif appr.get("value") in ("1", "2") and appr.get("type", "?") == "Verified":
+                    row_style = row_style or "on #1e5944"
                 elif appr.get("value") == "-2" and appr.get("type", "?") == "Verified":
                     row_style = "on #320000"
                 elif appr.get("value") == "-1":
