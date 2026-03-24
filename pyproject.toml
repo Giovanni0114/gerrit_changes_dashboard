@@ -15,7 +15,6 @@ select = [
     "E",   # pycodestyle errors
     "F",   # Pyflakes (essential)
     "I",   # isort (import sorting)
-    "UP",  # pyupgrade (modernizing syntax)
     "B",   # flake8-bugbear (common bugs)
     "RUF"  # Ruff-specific rules
 ]

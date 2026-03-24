@@ -112,11 +112,11 @@ def build_table(
     table.add_column("Number", style="magenta", no_wrap=True)
     table.add_column("Commit", style="cyan", no_wrap=True)
     table.add_column("Subject", max_width=60)
-    table.add_column("Owner")
+    table.add_column("Project", no_wrap=True)
     table.add_column("Approvals")
 
     for ch in changes:
-        short = ch.hash[:12]
+        short = ch.hash[:7]
         data = results.get(ch.hash, {})
 
         if "error" in data:
@@ -130,7 +130,7 @@ def build_table(
         number_text = Text(str(data.get("number", "")), style=style)
 
         subject = Text(data.get("subject", ""))
-        owner = data.get("owner", {}).get("name", "")
+        project = data.get("project", "<unknown>")
 
         patch_sets = data.get("patchSets", [])
         approvals_text = Text()
@@ -163,7 +163,7 @@ def build_table(
             number_text,
             short,
             subject,
-            owner,
+            project,
             approvals_text,
             style=row_style,
         )
