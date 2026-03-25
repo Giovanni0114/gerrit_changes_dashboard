@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
-from threading import Thread
+from threading import Event, Thread
 
 from rich.console import Console
 from rich.live import Live
@@ -27,6 +27,7 @@ class Change:
     host: str
     hash: str
     waiting: bool = False
+    deleted: bool = False
 
 
 def load_config(path: Path) -> tuple[list[Change], int]:
@@ -108,7 +109,8 @@ def build_table(
     VIBE CODED, don't trust it
     """
     caption = (
-        f"[dim]config:[/dim] {config_path} | [dim]interval:[/dim] {interval}s | [dim]w[/dim] wait  [dim]q[/dim] quit"
+        f"[dim]config:[/dim] {config_path} | [dim]interval:[/dim] {interval}s"
+        f" | [dim]w[/dim] wait  [dim]d[/dim] delete  [dim]q[/dim] quit"
     )
     if status_msg:
         caption = f"{status_msg}\n{caption}"
@@ -134,6 +136,21 @@ def build_table(
     for idx, ch in enumerate(changes, 1):
         short = ch.hash[:7]
         data = results.get((ch.host, ch.hash), {})
+
+        if ch.deleted:
+            # Show minimal info for deleted rows
+            subject = Text(data.get("subject", ""), style="strike dim")
+            number_str = str(data.get("number", ""))
+            table.add_row(
+                str(idx),
+                Text(number_str, style="dim"),
+                Text(short, style="dim"),
+                subject,
+                Text(data.get("project", ""), style="dim"),
+                Text("deleted", style="dim red"),
+                style="on #1c1c1c",
+            )
+            continue
 
         if "error" in data:
             table.add_row(str(idx), "", short, Text(data["error"], style="red"), "", "")
@@ -288,9 +305,10 @@ def main():
                 return True
         return False
 
-    def refresh_all(prompt_msg: str = "") -> Table:
+    def _do_queries() -> None:
+        """Run SSH queries for all non-submitted, non-deleted changes. Updates results in place."""
         nonlocal last_mtime
-        pending = [ch for ch in changes if (ch.host, ch.hash) not in submitted_keys]
+        pending = [ch for ch in changes if (ch.host, ch.hash) not in submitted_keys and not ch.deleted]
 
         def _query(ch: Change) -> tuple[tuple[str, str], dict]:
             return (ch.host, ch.hash), query_approvals(ch.hash, ch.host)
@@ -312,6 +330,8 @@ def main():
                             pass
                     prev_approvals[key] = snapshot
 
+    def _build(prompt_msg: str = "") -> Table:
+        """Build the display table from cached results."""
         return build_table(changes, results, str(config_path), interval, status_msg, prompt_msg)
 
     def should_reload() -> bool:
@@ -341,9 +361,17 @@ def main():
         if not input_state["active"]:
             return ""
         buf = input_state["buf"]
-        return f"Mark as waiting — enter row # (1-{len(changes)}): {buf}_  [ESC=cancel]"
+        action = input_state["action"]
+        if action == "w":
+            label = "Toggle waiting"
+        else:
+            label = "Toggle deleted"
+        hint = f"{label} — enter row # (1-{len(changes)}): {buf}_  [ESC=cancel]"
+        if action == "d" and not buf:
+            hint += "  [a=all submitted  d=purge deleted  r=restore all]"
+        return hint
 
-    input_state: dict = {"active": False, "buf": ""}
+    input_state: dict = {"active": False, "buf": "", "action": ""}
     key_queue: Queue[str] = Queue()
 
     def _key_reader() -> None:
@@ -359,22 +387,46 @@ def main():
     reader_thread = Thread(target=_key_reader, daemon=True)
     reader_thread.start()
 
+    # Run initial queries synchronously so the first display has data
+    _do_queries()
+
+    refresh_done = Event()
+    refresh_done.set()  # no refresh in progress initially
+    refresh_pending = False  # True while a bg refresh is in flight
+
+    def _bg_refresh() -> None:
+        """Background thread: run SSH queries then signal completion."""
+        try:
+            _do_queries()
+        finally:
+            refresh_done.set()
+
     try:
-        with Live(refresh_all(_build_prompt()), console=console, refresh_per_second=1, screen=True) as live:
+        with Live(_build(_build_prompt()), console=console, refresh_per_second=1, screen=True) as live:
             seconds_since_refresh = 0.0
-            needs_visual_update = False
 
             def _visual_update() -> None:
                 """Redraw the table using cached results (no SSH queries)."""
-                live.update(build_table(changes, results, str(config_path), interval, status_msg, _build_prompt()))
+                live.update(_build(_build_prompt()))
 
-            def _full_refresh() -> None:
-                """Query Gerrit and redraw."""
-                live.update(refresh_all(_build_prompt()))
+            def _start_refresh() -> None:
+                """Kick off a background SSH refresh if one isn't running."""
+                nonlocal seconds_since_refresh, refresh_pending
+                if refresh_done.is_set():
+                    refresh_done.clear()
+                    refresh_pending = True
+                    seconds_since_refresh = 0.0
+                    Thread(target=_bg_refresh, daemon=True).start()
 
             while True:
                 time.sleep(0.1)
                 seconds_since_refresh += 0.1
+                needs_visual_update = False
+
+                # Check if background refresh just completed
+                if refresh_pending and refresh_done.is_set():
+                    refresh_pending = False
+                    needs_visual_update = True
 
                 # Process all pending keys
                 while True:
@@ -387,23 +439,36 @@ def main():
                         if key == "ESC":
                             input_state["active"] = False
                             input_state["buf"] = ""
-                        elif key == "\r":
+                        elif key in ("\r", "\n"):
                             buf = input_state["buf"]
+                            action = input_state["action"]
                             if buf.isdigit():
                                 row_num = int(buf)
                                 if 1 <= row_num <= len(changes):
                                     ch = changes[row_num - 1]
-                                    if (ch.host, ch.hash) in submitted_keys:
-                                        status_msg = f"[dim]#{row_num} already submitted[/dim]"
-                                    elif ch.waiting:
-                                        status_msg = f"[dim]#{row_num} already waiting[/dim]"
-                                    else:
-                                        ch.waiting = True
-                                        try:
-                                            last_mtime = _set_waiting_in_config(config_path, ch.hash)
-                                        except OSError:
-                                            pass
-                                        status_msg = f"[yellow]#{row_num} marked as waiting[/yellow]"
+                                    if action == "w":
+                                        if (ch.host, ch.hash) in submitted_keys:
+                                            status_msg = f"[dim]#{row_num} already submitted[/dim]"
+                                        elif ch.waiting:
+                                            ch.waiting = False
+                                            try:
+                                                last_mtime = _clear_waiting_in_config(config_path, ch.hash)
+                                            except OSError:
+                                                pass
+                                            status_msg = f"[yellow]#{row_num} no longer waiting[/yellow]"
+                                        else:
+                                            ch.waiting = True
+                                            try:
+                                                last_mtime = _set_waiting_in_config(config_path, ch.hash)
+                                            except OSError:
+                                                pass
+                                            status_msg = f"[yellow]#{row_num} marked as waiting[/yellow]"
+                                    elif action == "d":
+                                        ch.deleted = not ch.deleted
+                                        if ch.deleted:
+                                            status_msg = f"[red]#{row_num} marked for deletion[/red]"
+                                        else:
+                                            status_msg = f"[green]#{row_num} restored[/green]"
                                 else:
                                     status_msg = f"[red]Invalid row: {buf}[/red]"
                             else:
@@ -412,25 +477,89 @@ def main():
                             input_state["buf"] = ""
                         elif key in ("\x7f", "\x08"):
                             input_state["buf"] = input_state["buf"][:-1]
+                        elif input_state["action"] == "d" and not input_state["buf"] and key == "a":
+                            # Delete all submitted changes
+                            count = 0
+                            for ch in changes:
+                                if (ch.host, ch.hash) in submitted_keys and not ch.deleted:
+                                    ch.deleted = True
+                                    count += 1
+                            if count:
+                                status_msg = f"[red]{count} submitted change(s) marked for deletion[/red]"
+                            else:
+                                status_msg = "[dim]No submitted changes to delete[/dim]"
+                            input_state["active"] = False
+                            input_state["buf"] = ""
+                        elif input_state["action"] == "d" and not input_state["buf"] and key == "d":
+                            # Purge all deleted changes from config now
+                            deleted_hashes = {ch.hash for ch in changes if ch.deleted}
+                            if deleted_hashes:
+                                try:
+                                    cfg = json.loads(config_path.read_text())
+                                    cfg["changes"] = [
+                                        e for e in cfg.get("changes", []) if e.get("hash") not in deleted_hashes
+                                    ]
+                                    config_path.write_text(json.dumps(cfg, indent=2) + "\n")
+                                    last_mtime = config_mtime(config_path)
+                                except OSError:
+                                    pass
+                                changes[:] = [ch for ch in changes if not ch.deleted]
+                                # Clean up stale results
+                                valid_keys = {(ch.host, ch.hash) for ch in changes}
+                                for k in list(results):
+                                    if k not in valid_keys:
+                                        del results[k]
+                                status_msg = f"[red]{len(deleted_hashes)} change(s) permanently removed[/red]"
+                            else:
+                                status_msg = "[dim]Nothing to purge[/dim]"
+                            input_state["active"] = False
+                            input_state["buf"] = ""
+                        elif input_state["action"] == "d" and not input_state["buf"] and key == "r":
+                            # Restore all deleted changes
+                            restored = sum(1 for ch in changes if ch.deleted)
+                            for ch in changes:
+                                ch.deleted = False
+                            if restored:
+                                status_msg = f"[green]{restored} change(s) restored[/green]"
+                            else:
+                                status_msg = "[dim]Nothing to restore[/dim]"
+                            input_state["active"] = False
+                            input_state["buf"] = ""
                         elif key.isdigit():
                             input_state["buf"] += key
                     else:
                         if key == "w":
                             input_state["active"] = True
                             input_state["buf"] = ""
+                            input_state["action"] = "w"
+                        elif key == "d":
+                            input_state["active"] = True
+                            input_state["buf"] = ""
+                            input_state["action"] = "d"
                         elif key == "q":
+                            # Purge deleted changes from config before exit
+                            deleted_hashes = {ch.hash for ch in changes if ch.deleted}
+                            if deleted_hashes:
+                                try:
+                                    data = json.loads(config_path.read_text())
+                                    data["changes"] = [
+                                        e for e in data.get("changes", []) if e.get("hash") not in deleted_hashes
+                                    ]
+                                    config_path.write_text(json.dumps(data, indent=2) + "\n")
+                                except OSError:
+                                    pass
                             return
 
                     needs_visual_update = True
 
                 if should_reload():
-                    seconds_since_refresh = 0.0
-                    _full_refresh()
+                    _start_refresh()
+                    _visual_update()
                     needs_visual_update = False
                 elif seconds_since_refresh >= interval:
-                    seconds_since_refresh = 0.0
                     status_msg = ""
-                    _full_refresh()
+                    _start_refresh()
+                    _visual_update()
                     needs_visual_update = False
                 elif needs_visual_update:
                     _visual_update()
