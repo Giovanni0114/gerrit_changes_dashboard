@@ -28,6 +28,11 @@
                         "type": "string",
                         "description": "Git commit hash or Gerrit change-id",
                         "minLength": 1
+                    },
+                    "waiting": {
+                        "type": "boolean",
+                        "description": "When true, row is dimmed until an approval changes, then auto-set to false",
+                        "default": false
                     }
                 },
                 "required": [

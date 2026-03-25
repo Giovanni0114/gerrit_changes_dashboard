@@ -22,6 +22,7 @@ DEFAULT_INTERVAL = 30
 class Change:
     host: str
     hash: str
+    waiting: bool = False
 
 
 def load_config(path: Path) -> tuple[list[Change], int]:
@@ -36,7 +37,7 @@ def load_config(path: Path) -> tuple[list[Change], int]:
         commit_hash = entry["hash"]
         if not host:
             raise ValueError(f"Change '{commit_hash}' has no host and no default_host is set")
-        changes.append(Change(host=host, hash=commit_hash))
+        changes.append(Change(host=host, hash=commit_hash, waiting=bool(entry.get("waiting", False))))
     return changes, interval
 
 
@@ -141,6 +142,9 @@ def build_table(
         row_style = None
         if patch_sets:
             approvals = patch_sets[-1].get("approvals", [])
+            is_submitted = any(appr.get("type", "?") == "SUBM" for appr in approvals)
+            if is_submitted:
+                approvals = [appr for appr in approvals if appr.get("type", "?") == "SUBM"]
             seen = set()
             for appr in approvals:
                 key = (appr.get("type", ""), appr.get("by", {}).get("name", ""))
@@ -171,7 +175,7 @@ def build_table(
             subject,
             project,
             approvals_text,
-            style=row_style,
+            style="dim on #2a2a2a" if ch.waiting else row_style,
         )
 
     return table
@@ -183,9 +187,31 @@ def generate_example_config(path: Path):
         "interval": 30,
         "changes": [
             {"host": "gerrit.example.com", "hash": "REPLACE_WITH_COMMIT_HASH"},
+            {"host": "gerrit.example.com", "hash": "ANOTHER_HASH", "waiting": True},
         ],
     }
     path.write_text(json.dumps(example, indent=2) + "\n")
+
+
+def _approval_snapshot(data: dict) -> frozenset[tuple[str, str, str]]:
+    """Return a fingerprint of the current approvals for change-detection."""
+    patch_sets = data.get("patchSets", [])
+    if not patch_sets:
+        return frozenset()
+    approvals = patch_sets[-1].get("approvals", [])
+    return frozenset(
+        (appr.get("type", ""), appr.get("value", ""), appr.get("by", {}).get("name", "")) for appr in approvals
+    )
+
+
+def _clear_waiting_in_config(config_path: Path, commit_hash: str) -> float:
+    """Set waiting=false for the given hash in the config file. Returns new mtime."""
+    data = json.loads(config_path.read_text())
+    for entry in data.get("changes", []):
+        if entry.get("hash") == commit_hash:
+            entry["waiting"] = False
+    config_path.write_text(json.dumps(data, indent=2) + "\n")
+    return config_mtime(config_path)
 
 
 def main():
@@ -222,6 +248,8 @@ def main():
 
     console = Console()
     results: dict[tuple[str, str], dict] = {}
+    submitted_keys: set[tuple[str, str]] = set()
+    prev_approvals: dict[tuple[str, str], frozenset[tuple[str, str, str]]] = {}
     last_mtime = 0.0
     status_msg = ""
 
@@ -232,13 +260,36 @@ def main():
         sys.exit(1)
     last_mtime = config_mtime(config_path)
 
+    def _is_submitted(data: dict) -> bool:
+        for ps in data.get("patchSets", []):
+            if any(appr.get("type", "?") == "SUBM" for appr in ps.get("approvals", [])):
+                return True
+        return False
+
     def refresh_all() -> Table:
+        nonlocal last_mtime
+        pending = [ch for ch in changes if (ch.host, ch.hash) not in submitted_keys]
+
         def _query(ch: Change) -> tuple[tuple[str, str], dict]:
             return (ch.host, ch.hash), query_approvals(ch.hash, ch.host)
 
-        with ThreadPoolExecutor(max_workers=len(changes) or 1) as pool:
-            for key, data in pool.map(_query, changes):
+        with ThreadPoolExecutor(max_workers=len(pending) or 1) as pool:
+            for key, data in pool.map(_query, pending):
                 results[key] = data
+                if "error" not in data and _is_submitted(data):
+                    submitted_keys.add(key)
+
+                if "error" not in data:
+                    snapshot = _approval_snapshot(data)
+                    ch = next(c for c in changes if (c.host, c.hash) == key)
+                    if ch.waiting and key in prev_approvals and snapshot != prev_approvals[key]:
+                        ch.waiting = False
+                        try:
+                            last_mtime = _clear_waiting_in_config(config_path, ch.hash)
+                        except OSError:
+                            pass
+                    prev_approvals[key] = snapshot
+
         return build_table(changes, results, str(config_path), interval, status_msg)
 
     def should_reload() -> bool:
