@@ -22,6 +22,7 @@ class AppContext(Protocol):
     def toggle_deleted(self, row: int) -> None: ...
     def toggle_disabled(self, row: int) -> None: ...
     def refresh_all(self) -> None: ...
+    def open_change_webui(self, row: int) -> None: ...
     def add_change(self, commit_hash: str, host: str) -> None: ...
     def delete_all_submitted(self) -> None: ...
     def purge_deleted(self) -> None: ...
@@ -90,6 +91,10 @@ class InputHandler:
             self.action = "a"
             self.step = 1
             self.hash = ""
+        if key == "o":
+            self.active = True
+            self.buf = ""
+            self.action = "o"
         elif key == "r":
             ctx.refresh_all()
         elif key == "q":
@@ -149,6 +154,8 @@ class InputHandler:
                         ctx.toggle_deleted(row_num)
                     elif self.action == "d":
                         ctx.toggle_disabled(row_num)
+                    elif self.action == "o":
+                        ctx.open_change_webui(row_num)
                 else:
                     ctx.status_msg = f"[red]Invalid row: {self.buf}[/red]"
             else:

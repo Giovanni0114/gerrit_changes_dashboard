@@ -66,13 +66,14 @@ def build_table(
 ) -> Table:
     caption = (
         f"[dim]config:[/dim] {config_path} | "
-        f"[dim]interval:[/dim] {interval}s | "
-        f"[dim]a[/dim] add  "
-        "[dim]w[/dim] wait  "
-        "[dim]d[/dim] disable  "
-        "[dim]x[/dim] delete  "
-        "[dim]q[/dim] quit  "
-        "[dim]r[/dim] refresh  "
+        f"[dim]interval:[/dim] {interval}s \n"
+        "[bold]a[/] add  "
+        "[bold]w[/] wait  "
+        "[bold]d[/] disable  "
+        "[bold]x[/] delete  "
+        "[bold]r[/] refresh  "
+        "[bold]o[/] open  "
+        "[bold]q[/] quit  "
     )
 
     if status_msg:

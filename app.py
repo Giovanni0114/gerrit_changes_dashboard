@@ -1,5 +1,6 @@
 import json
 import time
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty, Queue
@@ -21,7 +22,7 @@ from display import build_table
 from gerrit import approval_snapshot, is_submitted, query_approvals
 from input_handler import InputHandler
 from models import Change
-from utils import NoEcho, AtomicCounter
+from utils import AtomicCounter, NoEcho
 
 
 class App:
@@ -286,6 +287,22 @@ class App:
             self.refresh_pending = True
             self.seconds_since_refresh = 0.0
             Thread(target=self._bg_refresh, daemon=True).start()
+
+    # --- Opem WebUI ---
+
+    def open_change_webui(self, row: int) -> None:
+        ch = self.changes[row - 1]
+
+        if (ch.host, ch.hash) not in self.results:
+            self.status_msg = f"[red]cannot open change #{row}[/red]"
+            return
+
+        url = self.results[(ch.host, ch.hash)].get("url")
+        if url:
+            webbrowser.open(url)
+            self.status_msg = f"[green]opened change #{row} in browser[/green]"
+        else:
+            self.status_msg = f"[red]URL not found for change #{row}[/red]"
 
     # --- Main loop ---
 
