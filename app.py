@@ -51,6 +51,7 @@ class App:
 
     def do_queries(self) -> None:
         """Run SSH queries for all non-submitted, non-deleted, non-disabled changes."""
+        self.status_msg = ""
         pending = [
             ch
             for ch in self.changes
@@ -63,6 +64,13 @@ class App:
         with ThreadPoolExecutor(max_workers=len(pending) or 1) as pool:
             for key, data in pool.map(_query, pending):
                 self.results[key] = data
+
+                if "patchSets" in data:
+                    latest_rev = data.get("patchSets")[-1].get("revision", "<no rev>")
+                    if latest_rev != key[1] and not latest_rev.startswith(key[1]):
+                        self.status_msg += f"[orange]Warning: latest patchset mismatch for {key[0]}"
+                        self.status_msg += f" - {key[1][:7]} vs {latest_rev}[/orange]\n"
+
                 if "error" not in data and is_submitted(data):
                     self.submitted_keys.add(key)
 
