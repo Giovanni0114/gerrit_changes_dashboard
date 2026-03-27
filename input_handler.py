@@ -23,6 +23,7 @@ class AppContext(Protocol):
     def toggle_disabled(self, row: int) -> None: ...
     def refresh_all(self) -> None: ...
     def open_change_webui(self, row: int) -> None: ...
+    def set_automerge(self, row: int) -> None: ...
     def add_change(self, commit_hash: str, host: str) -> None: ...
     def delete_all_submitted(self) -> None: ...
     def purge_deleted(self) -> None: ...
@@ -34,7 +35,7 @@ class InputHandler:
     def __init__(self) -> None:
         self.active: bool = False
         self.buf: str = ""
-        self.action: str = ""  # "a", "w", "d", "x", ""
+        self.action: str = ""
         self.step: int = 0  # for multi-step actions like "a" (add)
         self.hash: str = ""  # stashed hash during add flow
 
@@ -51,6 +52,10 @@ class InputHandler:
             label = "Toggle waiting"
         elif self.action == "d":
             label = "Toggle disabled"
+        elif self.action == "o":
+            label = "Open change in web UI"
+        elif self.action == "s":
+            label = "Set Automerge=+1"
         else:
             label = "Toggle deleted"
         hint = f"{label} — enter row # (1-{num_changes}): {self.buf}_  [ESC=cancel]"
@@ -95,6 +100,10 @@ class InputHandler:
             self.active = True
             self.buf = ""
             self.action = "o"
+        if key == "s":
+            self.active = True
+            self.buf = ""
+            self.action = "s"
         elif key == "r":
             ctx.refresh_all()
         elif key == "q":
@@ -156,6 +165,8 @@ class InputHandler:
                         ctx.toggle_disabled(row_num)
                     elif self.action == "o":
                         ctx.open_change_webui(row_num)
+                    elif self.action == "s":
+                        ctx.set_automerge(row_num)
                 else:
                     ctx.status_msg = f"[red]Invalid row: {self.buf}[/red]"
             else:

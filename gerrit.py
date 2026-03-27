@@ -5,6 +5,30 @@ import threading
 _ssh_lock = threading.Lock()
 ssh_request_count: int = 0
 
+def query_set_automerge(commit_hash: str, host: str) -> dict:
+    global ssh_request_count
+    with _ssh_lock:
+        ssh_request_count += 1
+    cmd = [
+        "ssh",
+        "-x",
+        host,
+        "gerrit",
+        "review",
+        commit_hash,
+        "--label",
+        "Automerge=+1",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
+            return {"error": msg}
+        return {"success": True}
+    except subprocess.TimeoutExpired:
+        return {"error": "SSH timeout"}
+
 
 def query_approvals(commit_hash: str, host: str) -> dict:
     global ssh_request_count

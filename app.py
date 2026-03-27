@@ -90,6 +90,20 @@ class App:
             for key, data in pool.map(_query, need):
                 self.results[key] = data
 
+    def set_automerge(self, row: int) -> None:
+        ch = self.changes[row - 1]
+        if (ch.host, ch.hash) not in self.results:
+            self.status_msg = f"[red]cannot set automerge for change #{row}[/red]"
+            return
+
+        result = gerrit.query_set_automerge(ch.hash, ch.host)
+        if "error" in result:
+            self.status_msg = f"[red]Automerge failed for change #{row}: {result['error']}[/red]"
+        else:
+            self.status_msg = f"[green]Automerge +1 set for change #{row}[/green]"
+            # Force refresh to show updated approvals and submitted status
+            self._start_refresh()
+
     # --- Config methods ---
 
     def reload_config(self) -> bool:

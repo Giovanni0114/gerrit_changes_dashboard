@@ -73,6 +73,7 @@ def build_table(
         "[bold]x[/] delete  "
         "[bold]r[/] refresh  "
         "[bold]o[/] open  "
+        "[bold]s[/] set automerge  "
         "[bold]q[/] quit  "
     )
 
