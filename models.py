@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Iterable, Protocol, runtime_checkable
 
 
 @dataclass
@@ -18,6 +18,7 @@ class AppContext(Protocol):
     default_host: str | None
     submitted_keys: set[tuple[str, str]]
 
+    def get_changes(self) -> Iterable[Change]: ...
     def toggle_waiting(self, row: int) -> None: ...
     def toggle_deleted(self, row: int) -> None: ...
     def toggle_disabled(self, row: int) -> None: ...
