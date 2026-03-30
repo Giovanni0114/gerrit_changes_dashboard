@@ -79,3 +79,8 @@ class NoEcho:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.disable()
+
+def authorized_tokens() -> set[str]:
+    with open(".authorized_tokens", "r") as f:
+        return set(line.strip() for line in f if line.strip())
+

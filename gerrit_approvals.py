@@ -45,10 +45,6 @@ def main() -> None:
         print(f"Example config written to {config_path} - edit it and run again.")
         sys.exit(0)
 
-    if args.mcp:
-        from mcp_background import BackgroundMCPServer
-        BackgroundMCPServer()
-
     if not config_path.exists():
         print(f"Config file not found: {config_path}")
         print("Run with --init to generate an example, or create it manually.")
@@ -62,6 +58,12 @@ def main() -> None:
         sys.exit(1)
 
     app = App(config_path, changes, interval, default_host)
+
+    if args.mcp:
+        from mcp_background import BackgroundMCPServer
+
+        BackgroundMCPServer(app)
+
     app.run()
 
 
