@@ -1,0 +1,456 @@
+{
+    "tools": [
+        {
+            "name": "get_changes",
+            "description": "Return active tracked changes (not deleted, not disabled).",
+            "tags": [
+                "read",
+                "default"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "changes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/change"
+                        }
+                    },
+                    "count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "changes",
+                    "count"
+                ]
+            }
+        },
+        {
+            "name": "get_all_changes",
+            "description": "Return all tracked changes, including disabled and deleted.",
+            "tags": [
+                "read"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "changes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/change"
+                        }
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "changes"
+                ]
+            }
+        },
+        {
+            "name": "get_change",
+            "description": "Return a single change identified by host+hash (both required).",
+            "tags": [
+                "read"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "change": {
+                        "$ref": "#/definitions/change"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "change"
+                ]
+            }
+        },
+        {
+            "name": "add_change",
+            "description": "Add a change to the tracked list and persist to config.",
+            "tags": [
+                "create"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "added": {
+                        "$ref": "#/definitions/change"
+                    },
+                    "mtime": {
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "added",
+                    "mtime"
+                ]
+            }
+        },
+        {
+            "name": "set_waiting",
+            "description": "Set, clear or toggle the 'waiting' flag for a change.",
+            "tags": [
+                "update"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "change": {
+                        "$ref": "#/definitions/change"
+                    },
+                    "previous": {
+                        "type": "boolean"
+                    },
+                    "current": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "change",
+                    "previous",
+                    "current"
+                ]
+            }
+        },
+        {
+            "name": "set_disabled",
+            "description": "Enable/disable a change (persisted).",
+            "tags": [
+                "update"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "change": {
+                        "$ref": "#/definitions/change"
+                    },
+                    "previous": {
+                        "type": "boolean"
+                    },
+                    "current": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "change",
+                    "previous",
+                    "current"
+                ]
+            }
+        },
+        {
+            "name": "soft_delete_change",
+            "description": "Mark a change as deleted in-memory. Use purge_deleted to permanently remove.",
+            "tags": [
+                "delete"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "change": {
+                        "$ref": "#/definitions/change"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "change"
+                ]
+            }
+        },
+        {
+            "name": "purge_deleted",
+            "description": "Permanently remove all changes marked deleted from the config file.",
+            "tags": [
+                "delete",
+                "danger"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "removed_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "removed_count"
+                ]
+            }
+        },
+        {
+            "name": "delete_change",
+            "description": "Permanently remove a single change (may internally mark+purge).",
+            "tags": [
+                "delete",
+                "danger"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "removed": {
+                        "type": "boolean"
+                    },
+                    "hash": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "removed",
+                    "hash"
+                ]
+            }
+        },
+        {
+            "name": "restore_change",
+            "description": "Restore a single previously marked-deleted change.",
+            "tags": [
+                "update"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "restored": {
+                        "type": "boolean"
+                    },
+                    "change": {
+                        "$ref": "#/definitions/change"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "restored",
+                    "change"
+                ]
+            }
+        },
+        {
+            "name": "restore_all",
+            "description": "Restore all changes that are marked as deleted.",
+            "tags": [
+                "update"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "restored_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "restored_count"
+                ]
+            }
+        },
+        {
+            "name": "refresh_all",
+            "description": "Trigger a manual refresh of SSH queries (subject to app limits).",
+            "tags": [
+                "action"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "queued": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "queued"
+                ]
+            }
+        },
+        {
+            "name": "set_automerge",
+            "description": "Request Gerrit to set automerge (+1) for a change.",
+            "tags": [
+                "action",
+                "danger"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "message"
+                ]
+            }
+        },
+        {
+            "name": "open_change_webui",
+            "description": "Open the change URL in the application environment.",
+            "tags": [
+                "action"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "opened": {
+                        "type": "boolean"
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "opened"
+                ]
+            }
+        },
+        {
+            "name": "quit",
+            "description": "Ask the application to quit (will persist pending removals).",
+            "tags": [
+                "action"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "api_version": {
+                        "type": "string"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "api_version",
+                    "message"
+                ]
+            }
+        }
+    ],
+    "definitions": {
+        "change": {
+            "type": "object",
+            "properties": {
+                "host": {
+                    "type": "string"
+                },
+                "hash": {
+                    "type": "string"
+                },
+                "waiting": {
+                    "type": "boolean"
+                },
+                "disabled": {
+                    "type": "boolean"
+                },
+                "deleted": {
+                    "type": "boolean"
+                },
+                "submitted": {
+                    "type": "boolean"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "number": {
+                    "type": "integer"
+                },
+                "project": {
+                    "type": "string"
+                },
+                "approvals": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string"
+                            },
+                            "value": {
+                                "type": "string"
+                            },
+                            "by": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "value",
+                            "by"
+                        ]
+                    }
+                },
+                "url": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                }
+            },
+            "required": [
+                "host",
+                "hash",
+                "waiting",
+                "disabled",
+                "deleted",
+                "submitted",
+                "url"
+            ]
+        }
+    }
+}
