@@ -1,4 +1,5 @@
 approvals.json
 __pycache__/
 uv.lock
+spec
 .authorized_tokens
