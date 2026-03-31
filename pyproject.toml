@@ -19,3 +19,8 @@ select = [
     "B",   # flake8-bugbear (common bugs)
     "RUF"  # Ruff-specific rules
 ]
+
+[project.optional-dependencies]
+mcp = [
+    "fastmcp"
+]

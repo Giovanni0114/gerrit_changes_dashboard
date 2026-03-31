@@ -27,6 +27,12 @@ def main() -> None:
         action="store_true",
         help="Generate an example config file and exit",
     )
+    parser.add_argument(
+        "--mcp",
+        action="store_true",
+        help="start MCP server for gerrit approvals",
+    )
+
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -52,6 +58,12 @@ def main() -> None:
         sys.exit(1)
 
     app = App(config_path, changes, interval, default_host)
+
+    if args.mcp:
+        from mcp_background import BackgroundMCPServer
+
+        BackgroundMCPServer(app)
+
     app.run()
 
 
