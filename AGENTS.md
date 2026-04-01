@@ -6,6 +6,10 @@ This document provides guidelines for agentic coding agents operating in this re
 > Don't be afraid to make changes in both this AGENTS.md file and in architecture of the program.
 > Challenge existing solutions if these feel heavy, overcomplicated or outdated.
 
+> [!TIP]
+> The `spec/` directory is listed in `.gitignore` and is a good scratch space for specs, plans,
+> and design documents. Use it freely — nothing there will be committed.
+
 ## Project Overview
 
 Gerrit Approvals Dashboard is a terminal-based monitoring tool built with
