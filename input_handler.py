@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from models import AppContext
@@ -13,6 +13,16 @@ PROMPTS_FOR_LAST_KEY = {
     "o": "Open change in web UI",
     "s": "Set Automerge +1",
 }
+
+# --------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class InputField:
+    name: str
+    special_chars: frozenset[str] = field(default_factory=frozenset)
+    digits_only: bool = False
+
 
 # --------------------------------------------------------------------------------
 
@@ -64,6 +74,10 @@ def add_change(app_ctx: AppContext, ctx: Context) -> None:
 def toggle_waiting(app_ctx: AppContext, ctx: Context) -> None:
     idx = ctx["idx"]
 
+    if idx == "a":
+        app_ctx.toggle_all_waiting()
+        return
+
     if not validator_int(idx):
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
@@ -74,6 +88,18 @@ def toggle_waiting(app_ctx: AppContext, ctx: Context) -> None:
 def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
     idx = ctx["idx"]
 
+    if idx == "a":
+        app_ctx.delete_all_submitted()
+        return
+
+    if idx == "x":
+        app_ctx.purge_deleted()
+        return
+
+    if idx == "r":
+        app_ctx.restore_all()
+        return
+
     if not validator_int(idx):
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
@@ -83,6 +109,10 @@ def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
 
 def toggle_disable(app_ctx: AppContext, ctx: Context) -> None:
     idx = ctx["idx"]
+
+    if idx == "a":
+        app_ctx.toggle_all_disabled()
+        return
 
     if not validator_int(idx):
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
@@ -117,19 +147,19 @@ def set_automerge(app_ctx: AppContext, ctx: Context) -> None:
 @dataclass
 class Action:
     action: Callable[[AppContext, Context], None]
-    required_inputs: Iterable[str]
+    required_inputs: list[InputField]
 
 
 REFRESH_ACTION = Action(refresh, [])
 QUIT_ACTION = Action(quit_app, [])
 
 LEADER_ACTIONS = {
-    "a": Action(add_change, ["hash", "host"]),
-    "w": Action(toggle_waiting, ["idx"]),
-    "d": Action(toggle_disable, ["idx"]),
-    "x": Action(handle_deletion, ["idx"]),
-    "o": Action(open_change, ["idx"]),
-    "s": Action(set_automerge, ["idx"]),
+    "a": Action(add_change, [InputField("hash"), InputField("host")]),
+    "w": Action(toggle_waiting, [InputField("idx", frozenset({"a"}), digits_only=True)]),
+    "d": Action(toggle_disable, [InputField("idx", frozenset({"a"}), digits_only=True)]),
+    "x": Action(handle_deletion, [InputField("idx", frozenset({"a", "x", "r"}), digits_only=True)]),
+    "o": Action(open_change, [InputField("idx", digits_only=True)]),
+    "s": Action(set_automerge, [InputField("idx", digits_only=True)]),
 }
 
 
@@ -164,7 +194,7 @@ class InputHandler:
 
         self.sequence: list[str] = []
         self.input: str | None = None
-        self.input_context_name: str | None = None
+        self.current_field: InputField | None = None
         self.context: dict[str, str] = {}
 
     def hints(self) -> str:
@@ -180,9 +210,11 @@ class InputHandler:
         if len(self.sequence) == 0:
             return ""
 
-        if self.input is not None:
+        if self.input is not None and self.current_field is not None:
             hint = PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
-            hint += f": {self.input_context_name}: {self.input}_ [ESC=cancel]"
+            special = self.current_field.special_chars
+            special_hint = f" [{' / '.join(sorted(special))}]" if special else ""
+            hint += f": {self.current_field.name}: {self.input}_{special_hint} [ESC=cancel]"
             return hint
 
         return PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
@@ -192,9 +224,10 @@ class InputHandler:
             self.reset()
             return
 
-        self.handle_input(key)
-
         if self.input is not None:
+            completed = self._handle_input(key)
+            if completed:
+                self._try_execute()
             return
 
         if not key_allowed_in_sequence(key, self.sequence):
@@ -207,40 +240,55 @@ class InputHandler:
         else:
             self.sequence.append(key)
 
+        self._try_execute()
+
+    def _try_execute(self) -> None:
+        """Find the action for the current sequence and execute it, or enter input mode for next required field."""
+        if not self.sequence:
+            return
+
         action = match_action(self.sequence[-1])
 
         if action is None:
             return
 
-        for required_input in action.required_inputs:
-            if required_input not in self.context:
+        for required_field in action.required_inputs:
+            if required_field.name not in self.context:
                 self.input = ""
-                self.input_context_name = required_input
+                self.current_field = required_field
                 return
 
         action.action(self.app_context, self.context)
-
         self.reset()
 
     def reset(self) -> None:
         self.input = None
-        self.input_context_name = None
+        self.current_field = None
         self.sequence = []
         self.context = {}
 
-    def handle_input(self, key: str) -> None:
-        if self.input is None:
-            return
+    def _handle_input(self, key: str) -> bool:
+        """Process a key while in input mode. Returns True if the field is now complete."""
+        assert self.current_field is not None
 
         if key == "<enter>":
-            assert self.input_context_name is not None
-            self.context[self.input_context_name] = self.input
+            self.context[self.current_field.name] = self.input or ""
             self.input = None
-            self.input_context_name = None
-            return
+            self.current_field = None
+            return True
 
         if key == "<bs>":
-            self.input = self.input[:-1]
-            return
+            self.input = (self.input or "")[:-1]
+            return False
 
-        self.input += key
+        if key in self.current_field.special_chars:
+            self.context[self.current_field.name] = key
+            self.input = None
+            self.current_field = None
+            return True
+
+        if self.current_field.digits_only and not key.isdigit():
+            return False
+
+        self.input = (self.input or "") + key
+        return False
