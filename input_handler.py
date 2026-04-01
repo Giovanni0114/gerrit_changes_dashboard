@@ -5,11 +5,7 @@ from models import AppContext
 
 Context = dict[str, str]
 
-ENDLINES = ("\r", "\n")
-BACKSPACES = ("\x7f", "\x08")
-
 PROMPTS_FOR_LAST_KEY = {
-    " ": "Changes",
     "a": "Add change",
     "w": "Toggle waiting",
     "d": "Toggle disabled",
@@ -41,10 +37,25 @@ def quit_app(app_ctx: AppContext, ctx: Context) -> None:
 
 def add_change(app_ctx: AppContext, ctx: Context) -> None:
     hash = ctx["hash"]
-    host = ctx["host"]
+    raw_host = ctx["host"]
 
     if len(hash) == 0:
-        app_ctx.status_msg = f"[red]Invalid hash: \"{hash}\"[/red]"
+        app_ctx.status_msg = f'[red]Invalid hash: "{hash}"[/red]'
+        return
+
+    if raw_host == "":
+        host = app_ctx.default_host or ""
+    elif raw_host.isdigit():
+        idx = int(raw_host)
+        if idx < 1 or idx > len(app_ctx.changes):
+            app_ctx.status_msg = f"[red]No change at index {idx}[/red]"
+            return
+        host = app_ctx.changes[idx - 1].host
+    else:
+        host = raw_host
+
+    if not host:
+        app_ctx.status_msg = "[red]No host specified and no default_host configured[/red]"
         return
 
     app_ctx.add_change(hash, host)
@@ -151,23 +162,30 @@ class InputHandler:
     def __init__(self, app_ctx: AppContext):
         self.app_context = app_ctx
 
-        self.sequence: Iterable[str] = []
+        self.sequence: list[str] = []
         self.input: str | None = None
         self.input_context_name: str | None = None
         self.context: dict[str, str] = {}
+
+    def hints(self) -> str:
+        """Return keyboard shortcut hints for the current input state."""
+        if not self.sequence or self.sequence[0] != " ":
+            return "[bold]q[/] quit  [bold]r[/] refresh  [bold]Space[/] Changes"
+        return (
+            "[bold]a[/] add  [bold]w[/] wait  [bold]d[/] disable  "
+            "[bold]x[/] delete  [bold]o[/] open  [bold]s[/] automerge"
+        )
 
     def prompt(self, num_changes: int) -> str:
         if len(self.sequence) == 0:
             return ""
 
         if self.input is not None:
-            hint = PROMPTS_FOR_LAST_KEY.get(self.sequence[-1])
+            hint = PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
             hint += f": {self.input_context_name}: {self.input}_ [ESC=cancel]"
-            # TODO: hints aboud special characters
-            # hint += "  [a=all submitted  x=purge deleted  r=restore all]"
             return hint
 
-        return PROMPTS_FOR_LAST_KEY.get(self.sequence[-1])
+        return PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
 
     def handle_key(self, key: str) -> None:
         if key == "<esc>":
@@ -183,7 +201,10 @@ class InputHandler:
             self.app_context.status_msg = f"key not allowed in sequence : {key} {self.sequence}"
             return
 
-        if key != "<enter>":
+        if key == "<enter>":
+            if not self.sequence:
+                return
+        else:
             self.sequence.append(key)
 
         action = match_action(self.sequence[-1])
@@ -212,6 +233,7 @@ class InputHandler:
             return
 
         if key == "<enter>":
+            assert self.input_context_name is not None
             self.context[self.input_context_name] = self.input
             self.input = None
             self.input_context_name = None

@@ -153,6 +153,7 @@ class App:
             self.status_msg,
             prompt_msg,
             ssh_requests=gerrit.ssh_request_count,
+            hints=self.input.hints(),
         )
 
     def visual_update(self, live: Live) -> None:

@@ -47,9 +47,9 @@ class AtomicCounter:
             self._counter = value
 
 
-
 ENDLINES = ("\r", "\n")
 BACKSPACES = ("\x7f", "\x08")
+
 
 class NoEcho:
     instance: "NoEcho | None" = None
