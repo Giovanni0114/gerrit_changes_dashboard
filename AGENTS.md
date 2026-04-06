@@ -188,6 +188,46 @@ Run `uv run ruff check . --fix` to auto-correct most issues.
 - **rich**: Terminal rendering and UI
 - **fastmcp** (optional): Model Context Protocol support
 
+## Working with Features
+
+New features are tracked in `FEATURES.md` with brief PM-style descriptions.
+
+### ID scheme
+
+- Standalone feature: `001`, `002`, … — folder `spec/features/001-name/`
+- EPIC: `EPIC001`, `EPIC002`, … — folder `spec/features/EPIC001-name/`
+- Feature inside an EPIC: `EPIC001-001`, `EPIC001-002`, … — subfolder
+  `spec/features/EPIC001-name/EPIC001-001-feature-name/`
+
+### Folder contents
+
+Each standalone feature folder and each EPIC sub-feature folder contains:
+- `spec.md` — requirements, acceptance criteria, open questions
+- `test-cases.md` — concrete test scenarios to implement and verify
+
+Each EPIC folder contains:
+- `spec.md` — EPIC overview, motivation, and how the sub-features fit together
+- One subfolder per sub-feature (each with its own `spec.md` and `test-cases.md`)
+
+### Before implementing a feature
+
+1. Read the feature's `spec.md` in full. For EPIC features also read the parent
+   EPIC `spec.md` for context.
+2. Check `test-cases.md` — these drive the test suite for the feature.
+3. Note any open questions in `spec.md`; resolve them with the user before
+   writing code if they affect core design decisions.
+4. Update `spec.md` if the implementation reveals that requirements need
+   adjusting (note what changed and why).
+
+### Adding a new feature or EPIC
+
+1. Add a concise entry to `FEATURES.md` (PM-style notes, no heavy structure).
+2. For a standalone feature: create `spec/features/<id>-<name>/spec.md` and
+   `test-cases.md`.
+3. For an EPIC: create `spec/features/EPIC<id>-<name>/spec.md` (overview), then
+   add a subfolder per sub-feature with its own `spec.md` and `test-cases.md`.
+4. Keep spec files focused on *what* and *why*; leave *how* to the implementation.
+
 ## Common Tasks
 
 ### Adding a New Module
