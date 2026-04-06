@@ -14,6 +14,12 @@
             "type": "string",
             "description": "Default host to be used for changes"
         },
+        "default_port": {
+            "type": "integer",
+            "description": "Default SSH port to be used for changes",
+            "minimum": 1,
+            "maximum": 65535
+        },
         "changes": {
             "type": "array",
             "description": "List of Gerrit changes to track",
@@ -38,6 +44,12 @@
                         "type": "boolean",
                         "description": "When true, change is skipped during SSH queries and visually marked as disabled",
                         "default": false
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "SSH port for this change, overrides default_port",
+                        "minimum": 1,
+                        "maximum": 65535
                     }
                 },
                 "required": [

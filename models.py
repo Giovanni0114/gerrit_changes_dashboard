@@ -16,6 +16,7 @@ class TrackedChange:
     hash: str
     waiting: bool = False
     disabled: bool = False
+    port: int | None = None
 
     # --- In-memory only (not saved to config) ---
     deleted: bool = False

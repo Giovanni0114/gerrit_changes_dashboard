@@ -8,27 +8,34 @@ from models import TrackedChange
 DEFAULT_INTERVAL = 30
 
 
-def load_config(path: Path) -> tuple[list[TrackedChange], int, str | None]:
+def load_config(path: Path) -> tuple[list[TrackedChange], int, str | None, int | None]:
     data = json.loads(path.read_text())
     interval = int(data.get("interval", DEFAULT_INTERVAL))
     if interval < 1:
         raise ValueError(f"interval must be >= 1, got {interval}")
     default_host = data.get("default_host", None)
+    default_port = data.get("default_port", None)
+    if default_port is not None:
+        default_port = int(default_port)
     changes = []
     for entry in data.get("changes", []):
         host = entry.get("host", default_host)
         commit_hash = entry["hash"]
         if not host:
             raise ValueError(f"Change '{commit_hash}' has no host and no default_host is set")
+        port = entry.get("port", default_port)
+        if port is not None:
+            port = int(port)
         changes.append(
             TrackedChange(
                 host=host,
                 hash=commit_hash,
                 waiting=bool(entry.get("waiting", False)),
                 disabled=bool(entry.get("disabled", False)),
+                port=port,
             )
         )
-    return changes, interval, default_host
+    return changes, interval, default_host, default_port
 
 
 def config_mtime(path: Path) -> float:

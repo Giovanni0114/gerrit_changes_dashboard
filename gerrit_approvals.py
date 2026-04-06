@@ -52,12 +52,12 @@ def main() -> None:
 
     console = Console()
     try:
-        changes, interval, default_host = load_config(config_path)
+        changes, interval, default_host, default_port = load_config(config_path)
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
         console.print(f"[red]Error loading config:[/red] {exc}")
         sys.exit(1)
 
-    app = App(config_path, changes, interval, default_host)
+    app = App(config_path, changes, interval, default_host, default_port)
 
     if args.mcp:
         from mcp_background import BackgroundMCPServer

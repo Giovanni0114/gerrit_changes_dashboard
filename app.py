@@ -29,13 +29,19 @@ from utils import AtomicCounter, NoEcho
 
 class App:
     def __init__(
-        self, config_path: Path, changes: list[TrackedChange], interval: int, default_host: str | None
+        self,
+        config_path: Path,
+        changes: list[TrackedChange],
+        interval: int,
+        default_host: str | None,
+        default_port: int | None = None,
     ) -> None:
         self.config_path = config_path
         self.console = Console()
         self.changes = changes
         self.interval = interval
         self.default_host = default_host
+        self.default_port = default_port
         self.last_mtime: float = config_mtime(config_path)
         self.status_msg: str = ""
         self.running: bool = True
@@ -56,7 +62,7 @@ class App:
         pending = [ch for ch in self.changes if not ch.submitted and not ch.deleted and not ch.disabled]
 
         def _query(ch: TrackedChange) -> tuple[TrackedChange, dict]:
-            return ch, query_approvals(ch.hash, ch.host)
+            return ch, query_approvals(ch.hash, ch.host, ch.port)
 
         with ThreadPoolExecutor(max_workers=len(pending) or 1) as pool:
             for ch, data in pool.map(_query, pending):
@@ -74,7 +80,7 @@ class App:
             return
 
         def _query(ch: TrackedChange) -> tuple[TrackedChange, dict]:
-            return ch, query_approvals(ch.hash, ch.host)
+            return ch, query_approvals(ch.hash, ch.host, ch.port)
 
         with ThreadPoolExecutor(max_workers=len(need)) as pool:
             for ch, data in pool.map(_query, need):
@@ -114,7 +120,7 @@ class App:
             self.status_msg = f"[red]cannot set automerge for change #{row}[/red]"
             return
 
-        result = gerrit.query_set_automerge(ch.hash, ch.host)
+        result = gerrit.query_set_automerge(ch.hash, ch.host, ch.port)
         if "error" in result:
             self.status_msg = f"[red]Automerge failed for change #{row}: {result['error']}[/red]"
         else:
@@ -130,10 +136,11 @@ class App:
         if mtime <= self.last_mtime:
             return False
         try:
-            new_changes, new_interval, new_default_host = load_config(self.config_path)
+            new_changes, new_interval, new_default_host, new_default_port = load_config(self.config_path)
             self.changes = new_changes
             self.interval = new_interval
             self.default_host = new_default_host
+            self.default_port = new_default_port
             self.last_mtime = mtime
 
             self.status_msg = "[green]Config reloaded[/green]"

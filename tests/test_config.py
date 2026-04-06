@@ -46,7 +46,7 @@ class TestLoadConfig:
                 ],
             },
         )
-        changes, interval, default_host = load_config(p)
+        changes, interval, default_host, _ = load_config(p)
         assert interval == 15
         assert default_host == "gerrit.example.com"
         assert len(changes) == 2
@@ -59,7 +59,7 @@ class TestLoadConfig:
 
     def test_default_interval_used_when_absent(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": []})
-        _, interval, _ = load_config(p)
+        _, interval, _, _ = load_config(p)
         assert interval == 30
 
     def test_interval_below_one_raises(self, tmp_path: Path) -> None:
@@ -80,18 +80,55 @@ class TestLoadConfig:
                 "changes": [{"hash": "abc"}],
             },
         )
-        changes, _, _ = load_config(p)
+        changes, _, _, _ = load_config(p)
         assert changes[0].host == "fallback.gerrit.com"
 
     def test_no_default_host_returns_none(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": []})
-        _, _, default_host = load_config(p)
+        _, _, default_host, _ = load_config(p)
         assert default_host is None
 
     def test_empty_changes_list(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": []})
-        changes, _, _ = load_config(p)
+        changes, _, _, _ = load_config(p)
         assert changes == []
+
+    def test_default_port_applied_to_all_changes(self, tmp_path: Path) -> None:
+        p = _write_config(
+            tmp_path,
+            {
+                "default_port": 29418,
+                "changes": [
+                    {"hash": "abc", "host": "h"},
+                    {"hash": "def", "host": "h"},
+                ],
+            },
+        )
+        changes, _, _, default_port = load_config(p)
+        assert default_port == 29418
+        assert changes[0].port == 29418
+        assert changes[1].port == 29418
+
+    def test_per_change_port_overrides_default(self, tmp_path: Path) -> None:
+        p = _write_config(
+            tmp_path,
+            {
+                "default_port": 29418,
+                "changes": [
+                    {"hash": "abc", "host": "h", "port": 22},
+                    {"hash": "def", "host": "h"},
+                ],
+            },
+        )
+        changes, _, _, _ = load_config(p)
+        assert changes[0].port == 22
+        assert changes[1].port == 29418
+
+    def test_no_port_returns_none(self, tmp_path: Path) -> None:
+        p = _write_config(tmp_path, {"changes": [{"hash": "abc", "host": "h"}]})
+        changes, _, _, default_port = load_config(p)
+        assert default_port is None
+        assert changes[0].port is None
 
 
 # ---------------------------------------------------------------------------

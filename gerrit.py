@@ -6,20 +6,14 @@ _ssh_lock = threading.Lock()
 ssh_request_count: int = 0
 
 
-def query_set_automerge(commit_hash: str, host: str) -> dict:
+def query_set_automerge(commit_hash: str, host: str, port: int | None = None) -> dict:
     global ssh_request_count
     with _ssh_lock:
         ssh_request_count += 1
-    cmd = [
-        "ssh",
-        "-x",
-        host,
-        "gerrit",
-        "review",
-        commit_hash,
-        "--label",
-        "Automerge=+1",
-    ]
+    cmd = ["ssh", "-x"]
+    if port is not None:
+        cmd += ["-p", str(port)]
+    cmd += [host, "gerrit", "review", commit_hash, "--label", "Automerge=+1"]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
@@ -31,20 +25,14 @@ def query_set_automerge(commit_hash: str, host: str) -> dict:
         return {"error": "SSH timeout"}
 
 
-def query_approvals(commit_hash: str, host: str) -> dict:
+def query_approvals(commit_hash: str, host: str, port: int | None = None) -> dict:
     global ssh_request_count
     with _ssh_lock:
         ssh_request_count += 1
-    cmd = [
-        "ssh",
-        "-x",
-        host,
-        "gerrit",
-        "query",
-        "--format=json",
-        "--all-approvals",
-        commit_hash,
-    ]
+    cmd = ["ssh", "-x"]
+    if port is not None:
+        cmd += ["-p", str(port)]
+    cmd += [host, "gerrit", "query", "--format=json", "--all-approvals", commit_hash]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         lines = result.stdout.strip().splitlines()
