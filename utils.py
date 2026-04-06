@@ -47,6 +47,10 @@ class AtomicCounter:
             self._counter = value
 
 
+ENDLINES = ("\r", "\n")
+BACKSPACES = ("\x7f", "\x08")
+
+
 class NoEcho:
     instance: "NoEcho | None" = None
 
@@ -71,7 +75,14 @@ class NoEcho:
             # Possible escape sequence — drain remaining bytes
             while select.select([self.fd], [], [], 0.02)[0]:
                 os.read(self.fd, 1)
-            return "ESC"
+            return "<esc>"
+
+        if data in ENDLINES:
+            return "<enter>"
+
+        if data in BACKSPACES:
+            return "<bs>"
+
         return data
 
     def __enter__(self) -> Self:

@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -57,6 +58,21 @@ def update_config_field(path: Path, commit_hash: str, field: Literal["waiting", 
     data = json.loads(path.read_text())
     for entry in data.get("changes", []):
         if entry.get("hash") == commit_hash:
+            entry[field] = value
+    path.write_text(json.dumps(data, indent=2) + "\n")
+    return config_mtime(path)
+
+
+def bulk_update_config_field(path: Path, updates: Mapping[str, tuple[Literal["waiting", "disabled"], bool]]) -> float:
+    """Apply multiple field updates in a single read/write. Returns new mtime.
+
+    :param updates: mapping of commit_hash -> (field, value)
+    """
+    data = json.loads(path.read_text())
+    for entry in data.get("changes", []):
+        h = entry.get("hash")
+        if h in updates:
+            field, value = updates[h]
             entry[field] = value
     path.write_text(json.dumps(data, indent=2) + "\n")
     return config_mtime(path)

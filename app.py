@@ -14,6 +14,7 @@ from rich.table import Table
 import gerrit
 from config import (
     add_change_to_config,
+    bulk_update_config_field,
     config_mtime,
     load_config,
     remove_changes_from_config,
@@ -39,7 +40,7 @@ class App:
         self.status_msg: str = ""
         self.running: bool = True
         self.key_queue: Queue[str] = Queue()
-        self.input: InputHandler = InputHandler()
+        self.input: InputHandler = InputHandler(self)
         self.refresh_done = Event()
         self.refresh_done.set()
         self.refresh_pending: bool = False
@@ -153,6 +154,7 @@ class App:
             self.status_msg,
             prompt_msg,
             ssh_requests=gerrit.ssh_request_count,
+            hints=self.input.hints(),
         )
 
     def visual_update(self, live: Live) -> None:
@@ -204,6 +206,44 @@ class App:
             except OSError:
                 pass
             self.status_msg = f"[yellow]#{row} disabled[/yellow]"
+
+    def toggle_all_waiting(self) -> None:
+        candidates = [ch for ch in self.changes if not ch.deleted and not ch.disabled]
+        if not candidates:
+            self.status_msg = "[dim]No changes to toggle[/dim]"
+            return
+        target = not all(ch.waiting for ch in candidates)
+        updates = {ch.hash: ("waiting", target) for ch in candidates if ch.waiting != target}
+        for ch in candidates:
+            ch.waiting = target
+        if updates:
+            try:
+                self.last_mtime = bulk_update_config_field(self.config_path, updates)
+            except OSError:
+                pass
+        if target:
+            self.status_msg = f"[yellow]All {len(candidates)} change(s) marked as waiting[/yellow]"
+        else:
+            self.status_msg = f"[yellow]All {len(candidates)} change(s) no longer waiting[/yellow]"
+
+    def toggle_all_disabled(self) -> None:
+        candidates = [ch for ch in self.changes if not ch.deleted]
+        if not candidates:
+            self.status_msg = "[dim]No changes to toggle[/dim]"
+            return
+        target = not all(ch.disabled for ch in candidates)
+        updates = {ch.hash: ("disabled", target) for ch in candidates if ch.disabled != target}
+        for ch in candidates:
+            ch.disabled = target
+        if updates:
+            try:
+                self.last_mtime = bulk_update_config_field(self.config_path, updates)
+            except OSError:
+                pass
+        if target:
+            self.status_msg = f"[yellow]All {len(candidates)} change(s) disabled[/yellow]"
+        else:
+            self.status_msg = f"[green]All {len(candidates)} change(s) re-enabled[/green]"
 
     def refresh_all(self) -> None:
         if self.manual_refresh_counter.value() >= 5:
@@ -359,7 +399,7 @@ class App:
                             key = self.key_queue.get_nowait()
                         except Empty:
                             break
-                        self.input.handle_key(key, self)
+                        self.input.handle_key(key)
                         needs_visual_update = True
 
                     if self.reload_config():

@@ -39,10 +39,15 @@ python3 gerrit_approvals.py --init           # Generate example config
 ```
 
 ### Testing
-No automated test framework configured. Currently verify by:
-- Running the application and checking terminal output
-- Checking for SSH connectivity to Gerrit hosts
-- Verifying JSON config parsing with valid/invalid configs
+```bash
+uv sync --dev        # Install dev dependencies (pytest)
+uv run pytest        # Run all tests
+uv run pytest -v     # Verbose output
+```
+
+Tests live in `tests/`. Run them after every change to catch regressions.
+The suite covers `input_handler.py` (key routing, input collection, action dispatch)
+and `config.py` (JSON load/save functions).
 
 ## Code Style Guidelines
 

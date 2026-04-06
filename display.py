@@ -51,19 +51,9 @@ def build_table(
     status_msg: str = "",
     prompt_msg: str = "",
     ssh_requests: int = 0,
+    hints: str = "",
 ) -> Table:
-    caption = (
-        f"[dim]config:[/dim] {config_path} | "
-        f"[dim]interval:[/dim] {interval}s \n"
-        "[bold]a[/] add  "
-        "[bold]w[/] wait  "
-        "[bold]d[/] disable  "
-        "[bold]x[/] delete  "
-        "[bold]r[/] refresh  "
-        "[bold]o[/] open  "
-        "[bold]s[/] set automerge  "
-        "[bold]q[/] quit  "
-    )
+    caption = f"[dim]config:[/dim] {config_path} | [dim]interval:[/dim] {interval}s \n{hints}"
 
     if status_msg:
         caption = f"{status_msg}\n{caption}"
