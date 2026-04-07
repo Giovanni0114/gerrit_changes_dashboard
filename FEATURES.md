@@ -145,3 +145,22 @@ No point speccing this in detail before those land.
 
 ### EPIC002-001 | Expose comment operations over MCP
 ### EPIC002-002 | Expose review operations over MCP
+
+
+## 007 | Some indexes should support more advanced notation
+
+For operations that's resonable for such operations giving index shouyld support ranges such as:
+
+1. "3-8" means changes with idx 3, 4, 5, 6, 7, 8
+2. "3,2,4" means changes listed here
+
+whitespaces should be ignored
+notation can be combined so "1-2, 3-5, 11, 23" is correct expression.
+
+## 008 | BUG - invalid index should not crash app
+
+when index not inb range is used the app is crashed
+
+
+## 
+
