@@ -18,12 +18,13 @@ class TrackedChange:
     disabled: bool = False
     port: int | None = None
     comments: list[str] = field(default_factory=list)
+    number: int | None = None
 
     # --- In-memory only (not saved to config) ---
     deleted: bool = False
+    current_revision: str | None = None
 
     # --- Remote data from Gerrit SSH (None = not yet fetched) ---
-    number: int | None = None
     subject: str | None = None
     project: str | None = None
     url: str | None = None

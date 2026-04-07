@@ -86,6 +86,10 @@ def load_changes(path: Path, default_host: str | None, default_port: int | None)
         except (ValueError, TypeError) as ex:
             raise ValueError(f"Invalid port for change '{commit_hash}': {entry.get('port')}") from ex
 
+        number = entry.get("number", None)
+        if number is not None:
+            number = int(number)
+
         changes.append(
             TrackedChange(
                 hash=commit_hash,
@@ -94,6 +98,7 @@ def load_changes(path: Path, default_host: str | None, default_port: int | None)
                 waiting=bool(entry.get("waiting", False)),
                 disabled=bool(entry.get("disabled", False)),
                 comments=entry.get("comments", []),
+                number=number,
             )
         )
     return changes
@@ -171,10 +176,16 @@ def generate_example_changes(path: Path) -> None:
     path.write_text(json.dumps(example, indent=2) + "\n", encoding="utf-8")
 
 
-def update_config_field(path: Path, commit_hash: str, field: Literal["waiting", "disabled"], value: bool) -> float:
+def update_config_field(
+    path: Path,
+    commit_hash: str,
+    field: Literal["waiting", "disabled", "number"],
+    value: bool | int,
+) -> float:
     """Set field=value for the entry matching commit_hash. Returns new mtime.
 
-    Only 'waiting' and 'disabled' are persisted. 'deleted' is in-memory only.
+    Persisted fields: 'waiting', 'disabled', 'number'.
+    In-memory only: 'deleted'.
     """
     data = json.loads(path.read_text())
     for entry in data.get("changes", []):

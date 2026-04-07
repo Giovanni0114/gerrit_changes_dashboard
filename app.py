@@ -75,16 +75,12 @@ class App:
         pending = [ch for ch in self.changes if not ch.submitted and not ch.deleted and not ch.disabled]
 
         def _query(ch: TrackedChange) -> tuple[TrackedChange, dict]:
-            return ch, query_approvals(ch.hash, ch.host, ch.port)
+            # Use number as query_id if available, else fall back to hash
+            query_id = str(ch.number) if ch.number is not None else ch.hash
+            return ch, query_approvals(query_id, ch.host, ch.port)
 
         with ThreadPoolExecutor(max_workers=len(pending) or 1) as pool:
             for ch, data in pool.map(_query, pending):
-                if "patchSets" in data:
-                    latest_rev = data.get("patchSets")[-1].get("revision", "<no rev>")
-                    if latest_rev != ch.hash and not latest_rev.startswith(ch.hash):
-                        self.status_msg += (
-                            f"[orange]Warning: new patchset for {data.get('number')}: {latest_rev}[/orange]"
-                        )
                 self._store_result(ch, data)
 
     def query_disabled_once(self) -> None:
@@ -94,7 +90,9 @@ class App:
             return
 
         def _query(ch: TrackedChange) -> tuple[TrackedChange, dict]:
-            return ch, query_approvals(ch.hash, ch.host, ch.port)
+            # Use number as query_id if available, else fall back to hash
+            query_id = str(ch.number) if ch.number is not None else ch.hash
+            return ch, query_approvals(query_id, ch.host, ch.port)
 
         with ThreadPoolExecutor(max_workers=len(need)) as pool:
             for ch, data in pool.map(_query, need):
@@ -106,12 +104,25 @@ class App:
             ch.error = data["error"]
             return
         ch.error = None
-        ch.number = data.get("number")
+
+        # Extract number from response (auto-migrate to config if newly discovered)
+        discovered_number = data.get("number")
+        if discovered_number is not None and ch.number is None:
+            ch.number = discovered_number
+            try:
+                self.last_mtime = update_config_field(self.config_path, ch.hash, "number", discovered_number)
+            except OSError:
+                pass
+        elif discovered_number is not None:
+            ch.number = discovered_number
+
         ch.subject = data.get("subject")
         ch.project = data.get("project")
         ch.url = data.get("url")
         patch_sets = data.get("patchSets", [])
         if patch_sets:
+            # Extract current_revision from latest patchset
+            ch.current_revision = patch_sets[-1].get("revision")
             raw = patch_sets[-1].get("approvals", [])
             ch.approvals = [
                 ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", "")) for a in raw
@@ -134,7 +145,9 @@ class App:
             self.status_msg = f"[red]cannot set automerge for change #{row}[/red]"
             return
 
-        result = gerrit.query_set_automerge(ch.hash, ch.host, ch.port)
+        # Use current_revision as operation key if available, else fall back to hash
+        op_key = ch.current_revision if ch.current_revision is not None else ch.hash
+        result = gerrit.query_set_automerge(op_key, ch.host, ch.port)
         if "error" in result:
             self.status_msg = f"[red]Automerge failed for change #{row}: {result['error']}[/red]"
         else:
