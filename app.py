@@ -18,10 +18,11 @@ from config import (
     config_mtime,
     load_config,
     remove_changes_from_config,
+    resolve_email,
     update_config_field,
 )
 from display import build_table
-from gerrit import is_submitted, query_approvals
+from gerrit import is_submitted, query_approvals, query_open_changes
 from input_handler import InputHandler
 from models import ApprovalEntry, TrackedChange
 from utils import AtomicCounter, NoEcho
@@ -35,6 +36,7 @@ class App:
         interval: int,
         default_host: str | None,
         default_port: int | None = None,
+        email: str | None = None,
     ) -> None:
         self.config_path = config_path
         self.console = Console()
@@ -42,6 +44,7 @@ class App:
         self.interval = interval
         self.default_host = default_host
         self.default_port = default_port
+        self.email = email
         self.last_mtime: float = config_mtime(config_path)
         self.status_msg: str = ""
         self.running: bool = True
@@ -136,11 +139,12 @@ class App:
         if mtime <= self.last_mtime:
             return False
         try:
-            new_changes, new_interval, new_default_host, new_default_port = load_config(self.config_path)
+            new_changes, new_interval, new_default_host, new_default_port, new_email = load_config(self.config_path)
             self.changes = new_changes
             self.interval = new_interval
             self.default_host = new_default_host
             self.default_port = new_default_port
+            self.email = new_email
             self.last_mtime = mtime
 
             self.status_msg = "[green]Config reloaded[/green]"
@@ -313,6 +317,40 @@ class App:
             self.status_msg = f"[green]{restored} change(s) restored[/green]"
         else:
             self.status_msg = "[dim]Nothing to restore[/dim]"
+
+    def fetch_open_changes(self) -> None:
+        """Fetch all open changes owned by the user and add new ones to the tracked list."""
+        email = resolve_email(self.email)
+        if not email:
+            self.status_msg = "[red]No email configured and git config user.email not available[/red]"
+            return
+
+        results = query_open_changes(email, self.default_host or "", self.default_port)
+        existing_hashes = {ch.hash for ch in self.changes}
+        added = 0
+        for change_data in results:
+            if change_data.get("wip"):
+                continue
+            patch_set = change_data.get("currentPatchSet", {})
+            commit_hash = patch_set.get("revision")
+            if not commit_hash:
+                continue
+            if commit_hash in existing_hashes:
+                continue
+            host = self.default_host or ""
+            try:
+                self.last_mtime = add_change_to_config(self.config_path, commit_hash, host)
+            except OSError:
+                pass
+            self.changes.append(TrackedChange(host=host, hash=commit_hash, port=self.default_port))
+            existing_hashes.add(commit_hash)
+            added += 1
+
+        if added:
+            self.status_msg = f"[green]Added {added} change(s)[/green]"
+            self._start_refresh()
+        else:
+            self.status_msg = f"[dim] {len(results)} new changes found for {email} on {self.default_host}[/dim]"
 
     def quit(self) -> None:
         """Purge deleted changes from config, then stop the main loop."""

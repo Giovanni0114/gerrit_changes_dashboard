@@ -20,6 +20,10 @@
             "minimum": 1,
             "maximum": 65535
         },
+        "email": {
+            "type": "string",
+            "description": "Owner email for fetching open changes. Falls back to git config user.email."
+        },
         "changes": {
             "type": "array",
             "description": "List of Gerrit changes to track",

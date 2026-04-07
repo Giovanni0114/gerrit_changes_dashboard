@@ -28,6 +28,7 @@ class FakeApp:
     opened_webui: list[int] = field(default_factory=list)
     automerge_set: list[int] = field(default_factory=list)
     added_changes: list[tuple[str, str]] = field(default_factory=list)
+    fetch_open_changes_called: bool = False
 
     def get_changes(self) -> Iterable[TrackedChange]:
         return iter(self.changes)
@@ -67,6 +68,9 @@ class FakeApp:
 
     def restore_all(self) -> None:
         self.restore_all_called = True
+
+    def fetch_open_changes(self) -> None:
+        self.fetch_open_changes_called = True
 
     def quit(self) -> None:
         self.quit_called = True

@@ -8,6 +8,7 @@ from input_handler import (
     InputField,
     InputHandler,
     add_change,
+    fetch_my_changes,
     handle_deletion,
     open_change,
     set_automerge,
@@ -461,3 +462,52 @@ class TestAddChange:
     def test_literal_host_used_as_is(self, app: FakeApp) -> None:
         add_change(app, {"hash": "abc", "host": "custom.host"})
         assert app.added_changes == [("abc", "custom.host")]
+
+
+# ---------------------------------------------------------------------------
+# Fetch open changes — keybind routing (TC-007, TC-008, TC-009)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchOpenChanges:
+    def test_f_triggers_fetch(self, app: FakeApp) -> None:
+        """TC-007: Pressing f calls fetch_open_changes()."""
+        h = InputHandler(app)
+        h.handle_key("f")
+        assert app.fetch_open_changes_called
+
+    def test_f_in_leader_sequence_does_nothing(self, app: FakeApp) -> None:
+        """f after Space is rejected (not a leader action)."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("f")
+        assert not app.fetch_open_changes_called
+        assert "not allowed" in app.status_msg
+
+    def test_hints_show_f_in_default_state(self, app: FakeApp) -> None:
+        """TC-009: Default hints include 'fetch' for the f key."""
+        h = InputHandler(app)
+        hints = h.hints()
+        assert "fetch" in hints
+
+    def test_hints_after_space_do_not_show_fetch(self, app: FakeApp) -> None:
+        """After Space, hints should NOT include fetch."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        hints = h.hints()
+        assert "fetch" not in hints
+
+    def test_f_resets_handler(self, app: FakeApp) -> None:
+        """f should execute immediately and reset state."""
+        h = InputHandler(app)
+        h.handle_key("f")
+        assert h.input is None
+        assert h.sequence == []
+        assert h.context == {}
+
+
+class TestFetchMyChangesAction:
+    def test_calls_fetch_open_changes(self, app: FakeApp) -> None:
+        """Direct unit test for fetch_my_changes action function."""
+        fetch_my_changes(app, {})
+        assert app.fetch_open_changes_called

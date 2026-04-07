@@ -141,6 +141,11 @@ def set_automerge(app_ctx: AppContext, ctx: Context) -> None:
     app_ctx.set_automerge(int(idx))
 
 
+def fetch_my_changes(app_ctx: AppContext, ctx: Context) -> None:
+    """Fetch all open changes owned by the user from Gerrit."""
+    app_ctx.fetch_open_changes()
+
+
 # --------------------------------------------------------------------------------
 
 
@@ -152,6 +157,7 @@ class Action:
 
 REFRESH_ACTION = Action(refresh, [])
 QUIT_ACTION = Action(quit_app, [])
+FETCH_ACTION = Action(fetch_my_changes, [])
 
 LEADER_ACTIONS = {
     "a": Action(add_change, [InputField("hash"), InputField("host")]),
@@ -169,7 +175,7 @@ def key_allowed_in_sequence(key: str, sequence: Iterable[str]) -> bool:
 
     match sequence:
         case []:
-            return key in (" ", "r", "q")
+            return key in (" ", "r", "q", "f")
         case [" "]:
             return key in LEADER_ACTIONS
 
@@ -183,6 +189,9 @@ def match_action(key: str):
 
         case "q":
             return QUIT_ACTION
+
+        case "f":
+            return FETCH_ACTION
 
         case _:
             return LEADER_ACTIONS.get(key, None)
@@ -200,7 +209,7 @@ class InputHandler:
     def hints(self) -> str:
         """Return keyboard shortcut hints for the current input state."""
         if not self.sequence or self.sequence[0] != " ":
-            return "[bold]Space[/] Changes  [bold]q[/] quit  [bold]r[/] refresh"
+            return "[bold]Space[/] Changes  [bold]q[/] quit  [bold]r[/] refresh  [bold]f[/] fetch"
         return (
             "[bold]a[/] add  "
             "[bold]w[/] wait  "

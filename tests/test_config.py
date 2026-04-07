@@ -10,6 +10,7 @@ from config import (
     bulk_update_config_field,
     load_config,
     remove_changes_from_config,
+    resolve_email,
     update_config_field,
 )
 
@@ -46,7 +47,7 @@ class TestLoadConfig:
                 ],
             },
         )
-        changes, interval, default_host, _ = load_config(p)
+        changes, interval, default_host, _, _ = load_config(p)
         assert interval == 15
         assert default_host == "gerrit.example.com"
         assert len(changes) == 2
@@ -59,7 +60,7 @@ class TestLoadConfig:
 
     def test_default_interval_used_when_absent(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": []})
-        _, interval, _, _ = load_config(p)
+        _, interval, _, _, _ = load_config(p)
         assert interval == 30
 
     def test_interval_below_one_raises(self, tmp_path: Path) -> None:
@@ -80,17 +81,17 @@ class TestLoadConfig:
                 "changes": [{"hash": "abc"}],
             },
         )
-        changes, _, _, _ = load_config(p)
+        changes, _, _, _, _ = load_config(p)
         assert changes[0].host == "fallback.gerrit.com"
 
     def test_no_default_host_returns_none(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": []})
-        _, _, default_host, _ = load_config(p)
+        _, _, default_host, _, _ = load_config(p)
         assert default_host is None
 
     def test_empty_changes_list(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": []})
-        changes, _, _, _ = load_config(p)
+        changes, _, _, _, _ = load_config(p)
         assert changes == []
 
     def test_default_port_applied_to_all_changes(self, tmp_path: Path) -> None:
@@ -104,7 +105,7 @@ class TestLoadConfig:
                 ],
             },
         )
-        changes, _, _, default_port = load_config(p)
+        changes, _, _, default_port, _ = load_config(p)
         assert default_port == 29418
         assert changes[0].port == 29418
         assert changes[1].port == 29418
@@ -120,13 +121,13 @@ class TestLoadConfig:
                 ],
             },
         )
-        changes, _, _, _ = load_config(p)
+        changes, _, _, _, _ = load_config(p)
         assert changes[0].port == 22
         assert changes[1].port == 29418
 
     def test_no_port_returns_none(self, tmp_path: Path) -> None:
         p = _write_config(tmp_path, {"changes": [{"hash": "abc", "host": "h"}]})
-        changes, _, _, default_port = load_config(p)
+        changes, _, _, default_port, _ = load_config(p)
         assert default_port is None
         assert changes[0].port is None
 
@@ -270,3 +271,85 @@ class TestRemoveChangesFromConfig:
         p = _write_config(tmp_path, {"changes": [{"hash": "a", "host": "h"}]})
         mtime = remove_changes_from_config(p, {"a"})
         assert mtime == p.stat().st_mtime
+
+
+# ---------------------------------------------------------------------------
+# resolve_email
+# ---------------------------------------------------------------------------
+
+
+class TestResolveEmail:
+    def test_email_from_config(self) -> None:
+        """TC-001: Config email takes priority over git fallback."""
+        assert resolve_email("alice@example.com") == "alice@example.com"
+
+    def test_email_from_git_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """TC-002: When config email is None, falls back to git config."""
+        import subprocess
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *args, **kwargs: type("Result", (), {"returncode": 0, "stdout": "bob@example.com\n"})(),
+        )
+        assert resolve_email(None) == "bob@example.com"
+
+    def test_no_email_available_subprocess_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """TC-003: When config email is None and git fails, returns None."""
+        import subprocess
+
+        def _fail(*args, **kwargs):
+            raise FileNotFoundError("git not found")
+
+        monkeypatch.setattr(subprocess, "run", _fail)
+        assert resolve_email(None) is None
+
+    def test_no_email_available_nonzero_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """TC-003 variant: git returns non-zero exit code."""
+        import subprocess
+
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *args, **kwargs: type("Result", (), {"returncode": 1, "stdout": ""})(),
+        )
+        assert resolve_email(None) is None
+
+
+# ---------------------------------------------------------------------------
+# load_config — email field
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigEmail:
+    def test_email_returned_as_fifth_element(self, tmp_path: Path) -> None:
+        """TC-016: Config with email returns it as 5th tuple element."""
+        p = _write_config(
+            tmp_path,
+            {
+                "email": "test@example.com",
+                "changes": [{"hash": "abc", "host": "h"}],
+            },
+        )
+        _, _, _, _, email = load_config(p)
+        assert email == "test@example.com"
+
+    def test_no_email_returns_none(self, tmp_path: Path) -> None:
+        """TC-016 variant: Config without email returns None as 5th element."""
+        p = _write_config(tmp_path, {"changes": [{"hash": "abc", "host": "h"}]})
+        _, _, _, _, email = load_config(p)
+        assert email is None
+
+    def test_config_with_email_loads_without_error(self, tmp_path: Path) -> None:
+        """TC-015: Config with email field loads successfully."""
+        p = _write_config(
+            tmp_path,
+            {
+                "email": "test@example.com",
+                "changes": [],
+            },
+        )
+        changes, interval, _, _, email = load_config(p)
+        assert email == "test@example.com"
+        assert changes == []
+        assert interval == 30

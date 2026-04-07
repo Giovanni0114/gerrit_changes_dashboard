@@ -1,4 +1,5 @@
 import json
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
@@ -8,7 +9,29 @@ from models import TrackedChange
 DEFAULT_INTERVAL = 30
 
 
-def load_config(path: Path) -> tuple[list[TrackedChange], int, str | None, int | None]:
+def resolve_email(config_email: str | None) -> str | None:
+    """Resolve user email: config value takes priority, then git config fallback.
+
+    Returns None if no email can be determined.
+    """
+    if config_email is not None:
+        return config_email
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        email = result.stdout.strip()
+        return email if email else None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def load_config(path: Path) -> tuple[list[TrackedChange], int, str | None, int | None, str | None]:
     data = json.loads(path.read_text())
     interval = int(data.get("interval", DEFAULT_INTERVAL))
     if interval < 1:
@@ -35,7 +58,7 @@ def load_config(path: Path) -> tuple[list[TrackedChange], int, str | None, int |
                 port=port,
             )
         )
-    return changes, interval, default_host, default_port
+    return changes, interval, default_host, default_port, data.get("email")
 
 
 def config_mtime(path: Path) -> float:
