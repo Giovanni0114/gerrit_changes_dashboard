@@ -162,5 +162,16 @@ notation can be combined so "1-2, 3-5, 11, 23" is correct expression.
 when index not inb range is used the app is crashed
 
 
-## 
+## 009 | Add keybind to open config/approvals in default editor
+
+This should be implemented after 001 when approvals.json file will be splitd
+
+There should be two new keybinds
+
+  `<space>` + e + c  for opening config
+  `<space>` + e + a  for opening approvals
+
+Editor should be configurable, but we should use "EDITOR" env variable by default.
+After closing editor, config and approvals should be reloaded.
+
 
