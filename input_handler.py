@@ -12,6 +12,8 @@ PROMPTS_FOR_LAST_KEY = {
     "x": "Toggle deletion",
     "o": "Open change in web UI",
     "s": "Set Automerge +1",
+    "e": "Editor",
+    "c": "Open config in editor",
 }
 
 # --------------------------------------------------------------------------------
@@ -141,6 +143,16 @@ def set_automerge(app_ctx: AppContext, ctx: Context) -> None:
     app_ctx.set_automerge(int(idx))
 
 
+def open_config_in_editor(app_ctx: AppContext, ctx: Context) -> None:
+    """Open the TOML config file in the configured editor."""
+    app_ctx.open_config_in_editor()
+
+
+def open_approvals_in_editor(app_ctx: AppContext, ctx: Context) -> None:
+    """Open the approvals/changes file in the configured editor."""
+    app_ctx.open_approvals_in_editor()
+
+
 def fetch_my_changes(app_ctx: AppContext, ctx: Context) -> None:
     """Fetch all open changes owned by the user from Gerrit."""
     app_ctx.fetch_open_changes()
@@ -166,6 +178,12 @@ LEADER_ACTIONS = {
     "x": Action(handle_deletion, [InputField("idx", frozenset({"a", "x", "r"}), digits_only=True)]),
     "o": Action(open_change, [InputField("idx", digits_only=True)]),
     "s": Action(set_automerge, [InputField("idx", digits_only=True)]),
+    "e": None,  # submenu — resolved in match_action via full sequence
+}
+
+EDITOR_ACTIONS = {
+    "c": Action(open_config_in_editor, []),
+    "a": Action(open_approvals_in_editor, []),
 }
 
 
@@ -178,12 +196,23 @@ def key_allowed_in_sequence(key: str, sequence: Iterable[str]) -> bool:
             return key in (" ", "r", "q", "f")
         case [" "]:
             return key in LEADER_ACTIONS
+        case [" ", "e"]:
+            return key in EDITOR_ACTIONS
 
     return False
 
 
-def match_action(key: str):
-    match key:
+def match_action(sequence: list[str]) -> Action | None:
+    if not sequence:
+        return None
+
+    last = sequence[-1]
+
+    match sequence:
+        case [" ", "e", key]:
+            return EDITOR_ACTIONS.get(key, None)
+
+    match last:
         case "r":
             return REFRESH_ACTION
 
@@ -194,7 +223,11 @@ def match_action(key: str):
             return FETCH_ACTION
 
         case _:
-            return LEADER_ACTIONS.get(key, None)
+            action = LEADER_ACTIONS.get(last, None)
+            # "e" is a submenu prefix — no direct action
+            if action is None and last != "e":
+                return None
+            return action
 
 
 class InputHandler:
@@ -210,13 +243,16 @@ class InputHandler:
         """Return keyboard shortcut hints for the current input state."""
         if not self.sequence or self.sequence[0] != " ":
             return "[bold]Space[/] Changes  [bold]q[/] quit  [bold]r[/] refresh  [bold]f[/] fetch"
+        if self.sequence == [" ", "e"]:
+            return "[bold]c[/] config  [bold]a[/] approvals"
         return (
             "[bold]a[/] add  "
             "[bold]w[/] wait  "
             "[bold]d[/] disable  "
             "[bold]x[/] delete  "
             "[bold]o[/] open  "
-            "[bold]s[/] automerge"
+            "[bold]s[/] automerge  "
+            "[bold]e[/] editor"
         )
 
     def prompt(self, num_changes: int) -> str:
@@ -260,7 +296,7 @@ class InputHandler:
         if not self.sequence:
             return
 
-        action = match_action(self.sequence[-1])
+        action = match_action(self.sequence)
 
         if action is None:
             return

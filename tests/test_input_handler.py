@@ -10,7 +10,9 @@ from input_handler import (
     add_change,
     fetch_my_changes,
     handle_deletion,
+    open_approvals_in_editor,
     open_change,
+    open_config_in_editor,
     set_automerge,
     toggle_disable,
     toggle_waiting,
@@ -511,3 +513,109 @@ class TestFetchMyChangesAction:
         """Direct unit test for fetch_my_changes action function."""
         fetch_my_changes(app, {})
         assert app.fetch_open_changes_called
+
+
+# ---------------------------------------------------------------------------
+# Editor keybinds — Space + e + c / Space + e + a (feature 009)
+# ---------------------------------------------------------------------------
+
+
+class TestEditorKeybinds:
+    def test_space_e_intermediate_state_no_action(self, app: FakeApp) -> None:
+        """After Space + e alone, no editor action is triggered (waiting for c or a)."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        assert not app.open_config_in_editor_called
+        assert not app.open_approvals_in_editor_called
+        assert h.sequence == [" ", "e"]
+
+    def test_space_e_c_opens_config(self, app: FakeApp) -> None:
+        """Space + e + c triggers open_config_in_editor."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        h.handle_key("c")
+        assert app.open_config_in_editor_called
+        assert not app.open_approvals_in_editor_called
+
+    def test_space_e_a_opens_approvals(self, app: FakeApp) -> None:
+        """Space + e + a triggers open_approvals_in_editor."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        h.handle_key("a")
+        assert app.open_approvals_in_editor_called
+        assert not app.open_config_in_editor_called
+
+    def test_space_e_resets_after_c(self, app: FakeApp) -> None:
+        """Handler resets to idle after Space + e + c completes."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        h.handle_key("c")
+        assert h.sequence == []
+        assert h.input is None
+
+    def test_space_e_resets_after_a(self, app: FakeApp) -> None:
+        """Handler resets to idle after Space + e + a completes."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        h.handle_key("a")
+        assert h.sequence == []
+        assert h.input is None
+
+    def test_space_e_invalid_key_rejected(self, app: FakeApp) -> None:
+        """After Space + e, an unrecognised key sets status and does not open editor."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        h.handle_key("z")
+        assert "not allowed" in app.status_msg
+        assert not app.open_config_in_editor_called
+        assert not app.open_approvals_in_editor_called
+
+    def test_esc_after_space_e_resets(self, app: FakeApp) -> None:
+        """ESC after Space + e cancels without opening editor."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        h.handle_key("<esc>")
+        assert h.sequence == []
+        assert not app.open_config_in_editor_called
+        assert not app.open_approvals_in_editor_called
+
+    def test_hints_after_space_e(self, app: FakeApp) -> None:
+        """After Space + e, hints show config and approvals options."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("e")
+        hints = h.hints()
+        assert "config" in hints
+        assert "approvals" in hints
+
+    def test_hints_after_space_include_editor(self, app: FakeApp) -> None:
+        """After Space, hints include the 'editor' option."""
+        h = InputHandler(app)
+        h.handle_key(" ")
+        hints = h.hints()
+        assert "editor" in hints
+
+    def test_e_alone_not_accepted(self, app: FakeApp) -> None:
+        """Pressing e without Space prefix is rejected."""
+        h = InputHandler(app)
+        h.handle_key("e")
+        assert "not allowed" in app.status_msg
+
+
+class TestOpenEditorActions:
+    def test_open_config_in_editor_action(self, app: FakeApp) -> None:
+        """Direct unit test for open_config_in_editor action function."""
+        open_config_in_editor(app, {})
+        assert app.open_config_in_editor_called
+
+    def test_open_approvals_in_editor_action(self, app: FakeApp) -> None:
+        """Direct unit test for open_approvals_in_editor action function."""
+        open_approvals_in_editor(app, {})
+        assert app.open_approvals_in_editor_called

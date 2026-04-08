@@ -57,7 +57,9 @@ def main() -> None:
     cfg = load_toml_config(config_path)
     changes = load_changes(cfg.changes_file, cfg.default_host, cfg.default_port)
 
-    app = App(config_path, cfg.changes_file, changes, cfg.interval, cfg.default_host, cfg.default_port, cfg.email)
+    app = App(
+        config_path, cfg.changes_file, changes, cfg.interval, cfg.default_host, cfg.default_port, cfg.email, cfg.editor
+    )
 
     if args.mcp:
         from mcp_background import BackgroundMCPServer

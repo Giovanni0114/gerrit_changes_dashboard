@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tomllib
 from collections.abc import Mapping
@@ -20,6 +21,7 @@ class AppConfig:
     default_port: int | None
     email: str | None
     changes_file: Path
+    editor: str | None = None
 
 
 def load_toml_config(path: Path) -> AppConfig:
@@ -53,6 +55,7 @@ def load_toml_config(path: Path) -> AppConfig:
         default_port=default_port,
         email=config_data.get("default_email"),
         changes_file=changes_file,
+        editor=config_data.get("editor"),
     )
 
 
@@ -116,6 +119,16 @@ def resolve_email(config_email: str | None) -> str | None:
         return email
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
+
+
+def resolve_editor(config_editor: str | None) -> str | None:
+    """Resolve editor command: config value takes priority, then EDITOR env var.
+
+    Returns None if no editor can be determined.
+    """
+    if config_editor is not None:
+        return config_editor
+    return os.environ.get("EDITOR") or None
 
 
 def config_mtime(path: Path) -> float:
