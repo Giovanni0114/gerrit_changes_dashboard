@@ -13,11 +13,19 @@ from input_handler import (
     open_approvals_in_editor,
     open_change,
     open_config_in_editor,
+    parse_idx_notation,
     set_automerge,
     toggle_disable,
     toggle_waiting,
+    validate_idx,
 )
 from models import TrackedChange
+
+
+def _make_changes(n: int) -> list[TrackedChange]:
+    """Create n dummy TrackedChange objects for testing."""
+    return [TrackedChange(host=f"host{i}", hash=f"hash{i}") for i in range(1, n + 1)]
+
 
 # ---------------------------------------------------------------------------
 # InputField dataclass
@@ -154,6 +162,7 @@ class TestInputCollection:
         assert h.input == ""
 
     def test_enter_completes_field_and_executes(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
         h = self._enter_input_mode(app)
         h.handle_key("3")
         h.handle_key("<enter>")
@@ -240,6 +249,7 @@ class TestSpecialCharCompletion:
         assert app.all_waiting_toggled == 1
 
     def test_digit_after_partial_does_not_trigger_special(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
         h = self._enter_deletion_field(app)
         h.handle_key("5")
         h.handle_key("<enter>")
@@ -360,6 +370,7 @@ class TestHints:
 
 class TestToggleWaiting:
     def test_numeric_idx(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
         toggle_waiting(app, {"idx": "3"})
         assert app.toggled_waiting == [3]
 
@@ -372,9 +383,37 @@ class TestToggleWaiting:
         assert "Invalid" in app.status_msg
         assert app.toggled_waiting == []
 
+    def test_out_of_range_idx_sets_status(self, app: FakeApp) -> None:
+        app.changes = _make_changes(3)
+        toggle_waiting(app, {"idx": "5"})
+        assert "Invalid" in app.status_msg
+        assert app.toggled_waiting == []
+
+    def test_zero_idx_sets_status(self, app: FakeApp) -> None:
+        app.changes = _make_changes(3)
+        toggle_waiting(app, {"idx": "0"})
+        assert "Invalid" in app.status_msg
+        assert app.toggled_waiting == []
+
+    def test_multi_idx_range(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
+        toggle_waiting(app, {"idx": "2-4"})
+        assert app.toggled_waiting == [2, 3, 4]
+
+    def test_multi_idx_list(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
+        toggle_waiting(app, {"idx": "1,3,5"})
+        assert app.toggled_waiting == [1, 3, 5]
+
+    def test_multi_idx_combined(self, app: FakeApp) -> None:
+        app.changes = _make_changes(10)
+        toggle_waiting(app, {"idx": "1-3, 7, 9-10"})
+        assert app.toggled_waiting == [1, 2, 3, 7, 9, 10]
+
 
 class TestHandleDeletion:
     def test_numeric_idx(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
         handle_deletion(app, {"idx": "2"})
         assert app.toggled_deleted == [2]
 
@@ -394,9 +433,21 @@ class TestHandleDeletion:
         handle_deletion(app, {"idx": "bad"})
         assert "Invalid" in app.status_msg
 
+    def test_out_of_range_idx_sets_status(self, app: FakeApp) -> None:
+        app.changes = _make_changes(2)
+        handle_deletion(app, {"idx": "10"})
+        assert "Invalid" in app.status_msg
+        assert app.toggled_deleted == []
+
+    def test_multi_idx_deletion(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
+        handle_deletion(app, {"idx": "1,3"})
+        assert app.toggled_deleted == [1, 3]
+
 
 class TestToggleDisable:
     def test_numeric_idx(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
         toggle_disable(app, {"idx": "1"})
         assert app.toggled_disabled == [1]
 
@@ -408,9 +459,21 @@ class TestToggleDisable:
         toggle_disable(app, {"idx": "z"})
         assert "Invalid" in app.status_msg
 
+    def test_out_of_range_idx_sets_status(self, app: FakeApp) -> None:
+        app.changes = _make_changes(3)
+        toggle_disable(app, {"idx": "0"})
+        assert "Invalid" in app.status_msg
+        assert app.toggled_disabled == []
+
+    def test_multi_idx_disable(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
+        toggle_disable(app, {"idx": "2-4"})
+        assert app.toggled_disabled == [2, 3, 4]
+
 
 class TestOpenChange:
     def test_numeric_idx(self, app: FakeApp) -> None:
+        app.changes = _make_changes(10)
         open_change(app, {"idx": "7"})
         assert app.opened_webui == [7]
 
@@ -418,15 +481,38 @@ class TestOpenChange:
         open_change(app, {"idx": "x"})
         assert "Invalid" in app.status_msg
 
+    def test_out_of_range_idx_sets_status(self, app: FakeApp) -> None:
+        app.changes = _make_changes(3)
+        open_change(app, {"idx": "99"})
+        assert "Invalid" in app.status_msg
+        assert app.opened_webui == []
+
+    def test_multi_idx_open(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
+        open_change(app, {"idx": "1,3,5"})
+        assert app.opened_webui == [1, 3, 5]
+
 
 class TestSetAutomerge:
     def test_numeric_idx(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
         set_automerge(app, {"idx": "2"})
         assert app.automerge_set == [2]
 
     def test_invalid_idx_sets_status(self, app: FakeApp) -> None:
         set_automerge(app, {"idx": "nope"})
         assert "Invalid" in app.status_msg
+
+    def test_out_of_range_idx_sets_status(self, app: FakeApp) -> None:
+        app.changes = _make_changes(2)
+        set_automerge(app, {"idx": "5"})
+        assert "Invalid" in app.status_msg
+        assert app.automerge_set == []
+
+    def test_multi_idx_automerge(self, app: FakeApp) -> None:
+        app.changes = _make_changes(5)
+        set_automerge(app, {"idx": "1-3"})
+        assert app.automerge_set == [1, 2, 3]
 
 
 class TestAddChange:
@@ -619,3 +705,205 @@ class TestOpenEditorActions:
         """Direct unit test for open_approvals_in_editor action function."""
         open_approvals_in_editor(app, {})
         assert app.open_approvals_in_editor_called
+
+
+# ---------------------------------------------------------------------------
+# parse_idx_notation — unit tests (feature 007)
+# ---------------------------------------------------------------------------
+
+
+class TestParseIdxNotation:
+    """Tests for the advanced index notation parser."""
+
+    def test_single_index(self) -> None:
+        assert parse_idx_notation("3", 10) == [3]
+
+    def test_comma_separated(self) -> None:
+        assert parse_idx_notation("3,2,4", 10) == [2, 3, 4]
+
+    def test_range(self) -> None:
+        assert parse_idx_notation("3-8", 10) == [3, 4, 5, 6, 7, 8]
+
+    def test_combined(self) -> None:
+        assert parse_idx_notation("1-2, 3-5, 11, 23", 30) == [1, 2, 3, 4, 5, 11, 23]
+
+    def test_whitespace_ignored(self) -> None:
+        assert parse_idx_notation("  1 , 3 , 5  ", 10) == [1, 3, 5]
+
+    def test_single_element_range(self) -> None:
+        assert parse_idx_notation("5-5", 10) == [5]
+
+    def test_duplicates_removed(self) -> None:
+        assert parse_idx_notation("1,1,2,2", 5) == [1, 2]
+
+    def test_overlapping_ranges(self) -> None:
+        assert parse_idx_notation("1-3,2-4", 5) == [1, 2, 3, 4]
+
+    def test_empty_string_returns_none(self) -> None:
+        assert parse_idx_notation("", 10) is None
+
+    def test_whitespace_only_returns_none(self) -> None:
+        assert parse_idx_notation("   ", 10) is None
+
+    def test_non_numeric_returns_none(self) -> None:
+        assert parse_idx_notation("abc", 10) is None
+
+    def test_zero_index_returns_none(self) -> None:
+        assert parse_idx_notation("0", 10) is None
+
+    def test_out_of_range_returns_none(self) -> None:
+        assert parse_idx_notation("11", 10) is None
+
+    def test_range_out_of_bounds_returns_none(self) -> None:
+        assert parse_idx_notation("8-12", 10) is None
+
+    def test_reversed_range_returns_none(self) -> None:
+        assert parse_idx_notation("5-3", 10) is None
+
+    def test_double_comma_returns_none(self) -> None:
+        assert parse_idx_notation("1,,3", 10) is None
+
+    def test_trailing_comma_returns_none(self) -> None:
+        assert parse_idx_notation("1,3,", 10) is None
+
+    def test_leading_comma_returns_none(self) -> None:
+        assert parse_idx_notation(",1,3", 10) is None
+
+    def test_double_dash_returns_none(self) -> None:
+        assert parse_idx_notation("1--3", 10) is None
+
+    def test_range_with_zero_start_returns_none(self) -> None:
+        assert parse_idx_notation("0-3", 10) is None
+
+    def test_max_idx_boundary(self) -> None:
+        assert parse_idx_notation("10", 10) == [10]
+
+    def test_max_idx_plus_one_returns_none(self) -> None:
+        assert parse_idx_notation("11", 10) is None
+
+    def test_range_at_boundary(self) -> None:
+        assert parse_idx_notation("9-10", 10) == [9, 10]
+
+
+# ---------------------------------------------------------------------------
+# validate_idx — unit tests (feature 008)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateIdx:
+    """Tests for single-index validation with bounds checking."""
+
+    def test_valid_idx(self) -> None:
+        assert validate_idx("3", 5) == 3
+
+    def test_valid_idx_boundary_low(self) -> None:
+        assert validate_idx("1", 5) == 1
+
+    def test_valid_idx_boundary_high(self) -> None:
+        assert validate_idx("5", 5) == 5
+
+    def test_zero_returns_none(self) -> None:
+        assert validate_idx("0", 5) is None
+
+    def test_out_of_range_returns_none(self) -> None:
+        assert validate_idx("6", 5) is None
+
+    def test_non_numeric_returns_none(self) -> None:
+        assert validate_idx("abc", 5) is None
+
+    def test_empty_returns_none(self) -> None:
+        assert validate_idx("", 5) is None
+
+    def test_large_number_returns_none(self) -> None:
+        assert validate_idx("999", 3) is None
+
+    def test_no_changes_returns_none(self) -> None:
+        assert validate_idx("1", 0) is None
+
+
+# ---------------------------------------------------------------------------
+# Integration: multi-index through InputHandler keystroke flow (feature 007)
+# ---------------------------------------------------------------------------
+
+
+class TestMultiIdxKeystrokeFlow:
+    """Test that multi-index notation works through the full InputHandler → action pipeline."""
+
+    def test_range_via_keystrokes(self, app: FakeApp) -> None:
+        """Space + w, type '1-3', Enter should toggle waiting for indexes 1, 2, 3."""
+        app.changes = _make_changes(5)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("w")
+        for ch in "1-3":
+            h.handle_key(ch)
+        h.handle_key("<enter>")
+        assert app.toggled_waiting == [1, 2, 3]
+
+    def test_comma_list_via_keystrokes(self, app: FakeApp) -> None:
+        """Space + d, type '1,3,5', Enter should toggle disabled for indexes 1, 3, 5."""
+        app.changes = _make_changes(5)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("d")
+        for ch in "1,3,5":
+            h.handle_key(ch)
+        h.handle_key("<enter>")
+        assert app.toggled_disabled == [1, 3, 5]
+
+    def test_combined_notation_via_keystrokes(self, app: FakeApp) -> None:
+        """Space + x, type '1-2,4', Enter should toggle deleted for indexes 1, 2, 4."""
+        app.changes = _make_changes(5)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("x")
+        for ch in "1-2,4":
+            h.handle_key(ch)
+        h.handle_key("<enter>")
+        assert app.toggled_deleted == [1, 2, 4]
+
+    def test_out_of_range_via_keystrokes_sets_status(self, app: FakeApp) -> None:
+        """Space + o, type '99', Enter should set error status when only 3 changes exist."""
+        app.changes = _make_changes(3)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("o")
+        for ch in "99":
+            h.handle_key(ch)
+        h.handle_key("<enter>")
+        assert "Invalid" in app.status_msg
+        assert app.opened_webui == []
+
+    def test_zero_via_keystrokes_sets_status(self, app: FakeApp) -> None:
+        """Space + s, type '0', Enter should set error status."""
+        app.changes = _make_changes(3)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("s")
+        h.handle_key("0")
+        h.handle_key("<enter>")
+        assert "Invalid" in app.status_msg
+        assert app.automerge_set == []
+
+    def test_extra_chars_accepted_in_input(self, app: FakeApp) -> None:
+        """Dash and comma should be accepted in input mode for idx fields."""
+        app.changes = _make_changes(5)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("w")
+        h.handle_key("1")
+        h.handle_key("-")
+        h.handle_key("3")
+        assert h.input == "1-3"
+
+    def test_space_in_idx_input_accepted(self, app: FakeApp) -> None:
+        """Spaces in idx notation should be allowed (e.g. '1, 3')."""
+        app.changes = _make_changes(5)
+        h = InputHandler(app)
+        h.handle_key(" ")
+        h.handle_key("w")
+        h.handle_key("1")
+        h.handle_key(",")
+        h.handle_key(" ")
+        h.handle_key("3")
+        assert h.input == "1, 3"

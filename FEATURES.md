@@ -159,7 +159,7 @@ No point speccing this in detail before those land.
 
 ---
 
-## 007 | Some indexes should support more advanced notation
+## 007 | Some indexes should support more advanced notation — **DONE**
 
 For operations that's resonable for such operations giving index shouyld support ranges such as:
 
@@ -171,7 +171,7 @@ notation can be combined so "1-2, 3-5, 11, 23" is correct expression.
 
 ---
 
-## 008 | BUG - invalid index should not crash app
+## 008 | BUG - invalid index should not crash app — **DONE**
 
 when index not inb range is used the app is crashed
 

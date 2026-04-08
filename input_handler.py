@@ -24,13 +24,74 @@ class InputField:
     name: str
     special_chars: frozenset[str] = field(default_factory=frozenset)
     digits_only: bool = False
+    extra_chars: frozenset[str] = field(default_factory=frozenset)
 
 
 # --------------------------------------------------------------------------------
 
 
-def validator_int(input: str):
+def validator_int(input: str) -> bool:
     return input.isnumeric()
+
+
+def parse_idx_notation(raw: str, max_idx: int) -> list[int] | None:
+    """Parse advanced index notation into a sorted list of unique 1-based indexes.
+
+    Supported formats:
+    - Single index: ``"3"``
+    - Comma-separated: ``"3,2,4"``
+    - Range: ``"3-8"`` (inclusive on both ends)
+    - Combined: ``"1-2, 3-5, 11, 23"``
+
+    Whitespace is ignored. Returns ``None`` when the expression is invalid or any
+    index falls outside ``[1, max_idx]``.
+    """
+    if not raw or not raw.strip():
+        return None
+
+    stripped = raw.replace(" ", "")
+    if not stripped:
+        return None
+
+    result: set[int] = set()
+    for part in stripped.split(","):
+        if not part:
+            return None  # empty segment, e.g. "1,,3"
+        if "-" in part:
+            pieces = part.split("-")
+            if len(pieces) != 2 or not pieces[0] or not pieces[1]:
+                return None
+            if not pieces[0].isnumeric() or not pieces[1].isnumeric():
+                return None
+            lo, hi = int(pieces[0]), int(pieces[1])
+            if lo > hi:
+                return None
+            if lo < 1 or hi > max_idx:
+                return None
+            result.update(range(lo, hi + 1))
+        else:
+            if not part.isnumeric():
+                return None
+            val = int(part)
+            if val < 1 or val > max_idx:
+                return None
+            result.add(val)
+
+    return sorted(result) if result else None
+
+
+def validate_idx(raw: str, num_changes: int) -> int | None:
+    """Validate a single raw index string against the current changes count.
+
+    Returns the 1-based index as ``int`` on success, ``None`` on failure.
+    Rejects non-numeric input, zero, negative values, and out-of-range indexes.
+    """
+    if not raw.isnumeric():
+        return None
+    val = int(raw)
+    if val < 1 or val > num_changes:
+        return None
+    return val
 
 
 # --------------------------------------------------------------------------------
@@ -80,11 +141,13 @@ def toggle_waiting(app_ctx: AppContext, ctx: Context) -> None:
         app_ctx.toggle_all_waiting()
         return
 
-    if not validator_int(idx):
+    indexes = parse_idx_notation(idx, len(app_ctx.changes))
+    if indexes is None:
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
 
-    app_ctx.toggle_waiting(int(idx))
+    for i in indexes:
+        app_ctx.toggle_waiting(i)
 
 
 def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
@@ -102,11 +165,13 @@ def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
         app_ctx.restore_all()
         return
 
-    if not validator_int(idx):
+    indexes = parse_idx_notation(idx, len(app_ctx.changes))
+    if indexes is None:
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
 
-    app_ctx.toggle_deleted(int(idx))
+    for i in indexes:
+        app_ctx.toggle_deleted(i)
 
 
 def toggle_disable(app_ctx: AppContext, ctx: Context) -> None:
@@ -116,31 +181,37 @@ def toggle_disable(app_ctx: AppContext, ctx: Context) -> None:
         app_ctx.toggle_all_disabled()
         return
 
-    if not validator_int(idx):
+    indexes = parse_idx_notation(idx, len(app_ctx.changes))
+    if indexes is None:
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
 
-    app_ctx.toggle_disabled(int(idx))
+    for i in indexes:
+        app_ctx.toggle_disabled(i)
 
 
 def open_change(app_ctx: AppContext, ctx: Context) -> None:
     idx = ctx["idx"]
 
-    if not validator_int(idx):
+    indexes = parse_idx_notation(idx, len(app_ctx.changes))
+    if indexes is None:
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
 
-    app_ctx.open_change_webui(int(idx))
+    for i in indexes:
+        app_ctx.open_change_webui(i)
 
 
 def set_automerge(app_ctx: AppContext, ctx: Context) -> None:
     idx = ctx["idx"]
 
-    if not validator_int(idx):
+    indexes = parse_idx_notation(idx, len(app_ctx.changes))
+    if indexes is None:
         app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
         return
 
-    app_ctx.set_automerge(int(idx))
+    for i in indexes:
+        app_ctx.set_automerge(i)
 
 
 def open_config_in_editor(app_ctx: AppContext, ctx: Context) -> None:
@@ -171,13 +242,19 @@ REFRESH_ACTION = Action(refresh, [])
 QUIT_ACTION = Action(quit_app, [])
 FETCH_ACTION = Action(fetch_my_changes, [])
 
+# Common InputField for index parameters — allows digits plus multi-index notation chars (, - space).
+_IDX_EXTRA = frozenset({",", "-", " "})
+
 LEADER_ACTIONS = {
     "a": Action(add_change, [InputField("hash"), InputField("host")]),
-    "w": Action(toggle_waiting, [InputField("idx", frozenset({"a"}), digits_only=True)]),
-    "d": Action(toggle_disable, [InputField("idx", frozenset({"a"}), digits_only=True)]),
-    "x": Action(handle_deletion, [InputField("idx", frozenset({"a", "x", "r"}), digits_only=True)]),
-    "o": Action(open_change, [InputField("idx", digits_only=True)]),
-    "s": Action(set_automerge, [InputField("idx", digits_only=True)]),
+    "w": Action(toggle_waiting, [InputField("idx", frozenset({"a"}), digits_only=True, extra_chars=_IDX_EXTRA)]),
+    "d": Action(toggle_disable, [InputField("idx", frozenset({"a"}), digits_only=True, extra_chars=_IDX_EXTRA)]),
+    "x": Action(
+        handle_deletion,
+        [InputField("idx", frozenset({"a", "x", "r"}), digits_only=True, extra_chars=_IDX_EXTRA)],
+    ),
+    "o": Action(open_change, [InputField("idx", digits_only=True, extra_chars=_IDX_EXTRA)]),
+    "s": Action(set_automerge, [InputField("idx", digits_only=True, extra_chars=_IDX_EXTRA)]),
     "e": None,  # submenu — resolved in match_action via full sequence
 }
 
@@ -336,7 +413,7 @@ class InputHandler:
             self.current_field = None
             return True
 
-        if self.current_field.digits_only and not key.isdigit():
+        if self.current_field.digits_only and not key.isdigit() and key not in self.current_field.extra_chars:
             return False
 
         self.input = (self.input or "") + key
