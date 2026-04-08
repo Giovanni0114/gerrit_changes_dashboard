@@ -29,6 +29,8 @@ class FakeApp:
     automerge_set: list[int] = field(default_factory=list)
     added_changes: list[tuple[str, str]] = field(default_factory=list)
     fetch_open_changes_called: bool = False
+    open_config_in_editor_called: bool = False
+    open_approvals_in_editor_called: bool = False
 
     def get_changes(self) -> Iterable[TrackedChange]:
         return iter(self.changes)
@@ -71,6 +73,12 @@ class FakeApp:
 
     def fetch_open_changes(self) -> None:
         self.fetch_open_changes_called = True
+
+    def open_config_in_editor(self) -> None:
+        self.open_config_in_editor_called = True
+
+    def open_approvals_in_editor(self) -> None:
+        self.open_approvals_in_editor_called = True
 
     def quit(self) -> None:
         self.quit_called = True

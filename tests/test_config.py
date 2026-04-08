@@ -13,6 +13,7 @@ from config import (
     load_changes,
     load_toml_config,
     remove_changes_from_config,
+    resolve_editor,
     resolve_email,
     update_config_field,
 )
@@ -327,3 +328,43 @@ class TestLoadChanges:
         p = _write_config(tmp_path, {"changes": [{"hash": "abc", "host": "h", "extra": "field"}]})
         changes = load_changes(p, default_host=None, default_port=22)
         assert changes[0].hash == "abc"
+
+
+# ---------------------------------------------------------------------------
+# load_toml_config — editor field
+# ---------------------------------------------------------------------------
+
+
+class TestLoadTomlConfigEditor:
+    def test_editor_field_loaded(self, tmp_path: Path) -> None:
+        p = _write_toml(tmp_path, '[config]\neditor = "vim"\n')
+        cfg = load_toml_config(p)
+        assert cfg.editor == "vim"
+
+    def test_editor_defaults_to_none(self, tmp_path: Path) -> None:
+        p = _write_toml(tmp_path, "[config]\n")
+        cfg = load_toml_config(p)
+        assert cfg.editor is None
+
+
+# ---------------------------------------------------------------------------
+# resolve_editor
+# ---------------------------------------------------------------------------
+
+
+class TestResolveEditor:
+    def test_config_editor_takes_priority(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("EDITOR", "nano")
+        assert resolve_editor("vim") == "vim"
+
+    def test_env_var_used_when_config_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("EDITOR", "nano")
+        assert resolve_editor(None) == "nano"
+
+    def test_returns_none_when_no_editor(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("EDITOR", raising=False)
+        assert resolve_editor(None) is None
+
+    def test_empty_editor_env_treated_as_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("EDITOR", "")
+        assert resolve_editor(None) is None

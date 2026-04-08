@@ -1,3 +1,5 @@
+import shlex
+import subprocess
 import time
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +19,7 @@ from config import (
     load_changes,
     load_toml_config,
     remove_changes_from_config,
+    resolve_editor,
     resolve_email,
     update_config_field,
 )
@@ -37,6 +40,7 @@ class App:
         default_host: str | None,
         default_port: int | None = None,
         email: str | None = None,
+        editor: str | None = None,
     ) -> None:
         self.config_path = config_path
         self.changes_path = changes_path
@@ -46,6 +50,7 @@ class App:
         self.default_host = default_host
         self.default_port = default_port
         self.email = email
+        self.editor = editor
         self.toml_mtime: float = config_mtime(config_path)
         self.changes_mtime: float = config_mtime(changes_path)
         self.status_msg: str = ""
@@ -58,6 +63,8 @@ class App:
         self.seconds_since_refresh: float = 0.0
         self.manual_refresh_lock = Lock()
         self.manual_refresh_counter = AtomicCounter()
+        self.pending_editor: str | None = None
+        self._pause_keys = Event()
 
     # --- Query methods ---
 
@@ -74,8 +81,9 @@ class App:
                 if "patchSets" in data:
                     latest_rev = data.get("patchSets")[-1].get("revision", "<no rev>")
                     if latest_rev != ch.hash and not latest_rev.startswith(ch.hash):
-                        self.status_msg += f"[orange]Warning: latest patchset mismatch for {ch.host}"
-                        self.status_msg += f" - {ch.hash[:7]} vs {latest_rev}[/orange]\n"
+                        self.status_msg += (
+                            f"[orange]Warning: new patchset for {data.get('number')}: {latest_rev}[/orange]"
+                        )
                 self._store_result(ch, data)
 
     def query_disabled_once(self) -> None:
@@ -135,11 +143,11 @@ class App:
 
     # --- Config methods ---
 
-    def reload_config(self) -> bool:
+    def reload_config(self, force: bool = False) -> bool:
         """Check both files for changes and reload if needed. Returns True if either was reloaded."""
         new_toml_mtime = config_mtime(self.config_path)
         new_changes_mtime = config_mtime(self.changes_path)
-        if new_toml_mtime <= self.toml_mtime and new_changes_mtime <= self.changes_mtime:
+        if not force and new_toml_mtime <= self.toml_mtime and new_changes_mtime <= self.changes_mtime:
             return False
         try:
             cfg = load_toml_config(self.config_path)
@@ -159,6 +167,52 @@ class App:
             self.toml_mtime = new_toml_mtime
             self.changes_mtime = new_changes_mtime
             return False
+
+    # --- Editor methods ---
+
+    def open_config_in_editor(self) -> None:
+        """Schedule the TOML config file to be opened in the editor."""
+        self.pending_editor = "config"
+
+    def open_approvals_in_editor(self) -> None:
+        """Schedule the approvals/changes file to be opened in the editor."""
+        self.pending_editor = "approvals"
+
+    def _run_editor(self, target: str) -> None:
+        """Open target file in the configured editor synchronously."""
+        editor_cmd = resolve_editor(self.editor)
+        if not editor_cmd:
+            self.status_msg = "[red]No editor configured. Set EDITOR env var or 'editor' in config.[/red]"
+            return
+
+        path = self.config_path if target == "config" else self.changes_path
+
+        # Pause the key reader thread so it doesn't compete with the editor for stdin
+        self._pause_keys.set()
+        # Give the key reader time to finish any in-flight read_key() call (timeout=0.1s)
+        time.sleep(0.15)
+
+        no_echo = NoEcho.instance
+        if no_echo is not None:
+            # Restore normal (cooked) terminal mode so the editor has full control
+            no_echo.disable()
+
+        try:
+            cmd = shlex.split(editor_cmd) + [str(path)]
+            subprocess.run(cmd, check=False)
+        except (FileNotFoundError, OSError) as exc:
+            self.status_msg = f"[red]Failed to open editor '{editor_cmd}': {exc}[/red]"
+        finally:
+            if no_echo is not None:
+                # Re-apply cbreak mode for key reading
+                no_echo.enable()
+            # Drain any stale keys that accumulated during the editor session
+            while True:
+                try:
+                    self.key_queue.get_nowait()
+                except Empty:
+                    break
+            self._pause_keys.clear()
 
     # --- Display methods ---
 
@@ -378,6 +432,9 @@ class App:
         if no_echo is None:
             return
         while True:
+            if self._pause_keys.is_set():
+                time.sleep(0.05)
+                continue
             k = no_echo.read_key(timeout=0.1)
             if k is not None:
                 self.key_queue.put(k)
@@ -452,6 +509,16 @@ class App:
                         except Empty:
                             break
                         self.input.handle_key(key)
+                        needs_visual_update = True
+
+                    if self.pending_editor:
+                        target, self.pending_editor = self.pending_editor, None
+                        live.stop()
+                        try:
+                            self._run_editor(target)
+                            self.reload_config(force=True)
+                        finally:
+                            live.start()
                         needs_visual_update = True
 
                     if self.reload_config():
