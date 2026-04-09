@@ -98,7 +98,18 @@ class FakeApp:
         self.edited_comments.append((row, text))
 
     def delete_comment(self, row: int, comment_idx: int) -> None:
-        self.deleted_comments.append((row, comment_idx))
+        if row < 1 or row > len(self.changes):
+            self.status_msg = f"[red]No change at index {row}[/red]"
+            return
+
+        ch = self.changes[row - 1]
+        # Convert 1-based comment index to 0-based array index
+        array_idx = comment_idx - 1
+        if 0 <= array_idx < len(ch.comments):
+            self.deleted_comments.append((row, comment_idx))
+            ch.comments.pop(array_idx)
+        else:
+            self.status_msg = f"[red]No comment at index {comment_idx}[/red]"
 
     def delete_all_comments(self, row: int) -> None:
         self.deleted_all_comments.append(row)

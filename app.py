@@ -458,16 +458,27 @@ class App:
                 pass
 
     def delete_comment(self, row: int, comment_idx: int) -> None:
-        """Delete a specific comment from a change."""
+        """Delete a specific comment from a change.
+
+        comment_idx is 1-based (user input: 1 means first comment).
+        """
+        if row < 1 or row > len(self.changes):
+            self.status_msg = f"[red]No change at index {row}[/red]"
+            return
+
         ch = self.changes[row - 1]
-        if 0 <= comment_idx < len(ch.comments):
-            ch.comments.pop(comment_idx)
+        # Convert 1-based comment index to 0-based array index
+        array_idx = comment_idx - 1
+        if 0 <= array_idx < len(ch.comments):
+            ch.comments.pop(array_idx)
             try:
                 from config import update_config_comments
 
                 self.changes_mtime = update_config_comments(self.changes_path, ch.hash, ch.comments)
             except OSError:
                 pass
+        else:
+            self.status_msg = f"[red]No comment at index {comment_idx}[/red]"
 
     def delete_all_comments(self, row: int) -> None:
         """Delete all comments from a change."""

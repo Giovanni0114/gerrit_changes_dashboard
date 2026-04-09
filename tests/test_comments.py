@@ -158,12 +158,14 @@ class TestCommentActionFunctions:
         assert app.deleted_all_comments == [1]
 
     def test_tc_019_invalid_comment_index(self, app) -> None:
-        """TC-019: Invalid comment index should be no-op."""
+        """TC-019: Invalid comment index should set status message."""
         from input_handler import comment_delete
 
         app.changes = [TrackedChange(host="h", hash="abc", comments=["a", "b"])]
         comment_delete(app, {"idx": "1", "comment_idx": "5"})
-        # Should be no-op (implementation detail, but no crash)
+        # Should set error status and not modify comments
+        assert app.changes[0].comments == ["a", "b"]
+        assert "[red]" in app.status_msg
 
 
 # ---------------------------------------------------------------------------
