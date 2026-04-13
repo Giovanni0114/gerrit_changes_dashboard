@@ -221,3 +221,15 @@ first. 006 is a leaf task.
 
 Full specs are in `spec/features/EPIC003-verification-comments/`.
 
+## 010 | Add spinner and countdown to header
+
+Currently header shows just time of refreshed, and this is often misleading. I
+want to add some sort of rich.Spinner to indicate when operations are running
+in the background. Also, current time should be replaced with countdown to next
+planned refresh.
+
+## 011 | Make a SPIKE for the possibility of layering interface
+
+I would like to be able to create some sort of overlay screen, floating window,
+or some similar effect to show additional information on tab click
+
