@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
 from models import AppContext
+from utils import Arrow
 
 Context = dict[str, str]
 
@@ -414,6 +415,10 @@ class InputHandler:
         return PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
 
     def handle_key(self, key: str) -> None:
+        if isinstance(key, Arrow):
+            # TODO: create an handling for arrow navigation
+            return
+
         if key == "<esc>":
             self.reset()
             return

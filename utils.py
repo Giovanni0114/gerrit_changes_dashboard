@@ -5,6 +5,7 @@ import sys
 import termios
 import threading
 import tty
+from enum import Enum
 from threading import Lock
 from typing import Self
 
@@ -51,6 +52,16 @@ ENDLINES = ("\r", "\n")
 BACKSPACES = ("\x7f", "\x08")
 
 
+class Arrow(Enum):
+    UP = b"A"
+    DOWN = b"B"
+    RIGHT = b"C"
+    LEFT = b"D"
+
+
+ARROWS = {a.value: a for a in Arrow}
+
+
 class NoEcho:
     instance: "NoEcho | None" = None
 
@@ -65,8 +76,7 @@ class NoEcho:
         termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
         NoEcho.instance = None
 
-    def read_key(self, timeout: float = 0.1) -> str | None:
-        """Non-blocking key read. Returns single char, 'ESC', or None on timeout."""
+    def read_key(self, timeout: float = 0.1) -> str | Arrow | None:
         ready, _, _ = select.select([self.fd], [], [], timeout)
         if not ready:
             return None
@@ -74,7 +84,11 @@ class NoEcho:
         if data == "\x1b":
             # Possible escape sequence — drain remaining bytes
             while select.select([self.fd], [], [], 0.02)[0]:
-                os.read(self.fd, 1)
+                if os.read(self.fd, 1) == b"[":
+                    key = os.read(self.fd, 1)
+                    if key in ARROWS:
+                        return ARROWS[key]
+
             return "<esc>"
 
         if data in ENDLINES:
