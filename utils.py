@@ -94,6 +94,9 @@ class NoEcho:
 
             return "<esc>"
 
+        if data == "\t":
+            return "<tab>"
+
         if data in ENDLINES:
             return "<enter>"
 
