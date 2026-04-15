@@ -30,7 +30,7 @@ that let an authorized client (for example an LLM acting through the MCP) inspec
 manage the set of tracked Gerrit changes.
 
 Changes are managed through the `Changes` class (`changes.py`) which persists to a JSON
-changes file (`approvals.json`). The JSON file is **not intended for manual editing** — all
+changes file (`changes.json`). The JSON file is **not intended for manual editing** — all
 mutations happen through the TUI or MCP tools and are persisted automatically via
 `Changes.save_changes()`.
 

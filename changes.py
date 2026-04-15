@@ -93,6 +93,8 @@ class Changes:
     # --- changes file rw ---
 
     def load_changes(self, default_host: str | None, default_port: int | None):
+        self.changes.clear()
+
         data = json.loads(self.path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
             raise ValueError(f"Changes json file {self.path} is not a list")
@@ -104,8 +106,6 @@ class Changes:
                 raise ValueError(f"Invalid number for change entry: {entry}") from ex
 
             commit_hash = entry.get("hash")
-            if not commit_hash:
-                raise ValueError(f"Change entry missing required 'hash' field: {entry}")
 
             host = entry.get("host", default_host)
             if not host:
@@ -129,7 +129,7 @@ class Changes:
                 )
             )
 
-    def save_changes(self):
+    def save_changes(self) -> float:
         data = []
 
         for ch in self.changes:
@@ -161,3 +161,4 @@ class Changes:
             data.append(change)
 
         self.path.write_text(json.dumps(data, indent=2) + "\n")
+        return self.mtime()

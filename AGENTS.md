@@ -19,7 +19,7 @@ reviews via SSH queries.
 Configuration is split into two files:
 - **TOML config** (`config.toml`) — app settings: interval, default host/port, email, editor,
   and path to the changes file. Managed by `config.py` (`AppConfig` class).
-- **JSON changes file** (`approvals.json`) — tracked Gerrit changes. Managed by `changes.py`
+- **JSON changes file** (`changes.json`) — tracked Gerrit changes. Managed by `changes.py`
   (`Changes` class). **Not intended for manual editing** — all mutations happen through the
   TUI (add, delete, toggle flags, comments, fetch) and are persisted automatically via
   `Changes.save_changes()`. Manual editing is still possible but is a fallback, not the
@@ -173,7 +173,7 @@ uv run pytest -v     # Verbose output
 ### Config Management
 - Configuration is split into two files:
   - **TOML config** (`config.toml`) — app settings, read-only at runtime. Managed by `config.py` (`AppConfig`).
-  - **JSON changes file** (`approvals.json`) — tracked changes. Managed by `changes.py` (`Changes`).
+  - **JSON changes file** (`changes.json`) — tracked changes. Managed by `changes.py` (`Changes`).
 - The JSON changes file is **not intended for manual editing**. All mutations happen through
   the TUI and are persisted automatically via `Changes.save_changes()`.
 - Use `Changes.edit_change()` / `edit_changes()` context managers for safe single/batch

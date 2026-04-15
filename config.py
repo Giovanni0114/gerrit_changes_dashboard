@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 
 DEFAULT_INTERVAL = 30
-DEFAULT_CHANGES_FILENAME = "approvals.json"
+DEFAULT_CHANGES_FILENAME = "changes.json"
 DEFAULT_DEFAULT_PORT = 22
 
 

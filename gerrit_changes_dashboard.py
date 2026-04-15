@@ -42,7 +42,7 @@ def main() -> None:
 
     if args.init:
         generate_example_config(config_path)
-        print(f"Created {config_path} and- edit them and run again.")
+        print(f"Created {config_path} - edit it and run again.")
         sys.exit(0)
 
     if not config_path.exists():

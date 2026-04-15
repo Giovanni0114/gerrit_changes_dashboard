@@ -98,13 +98,11 @@ class App:
         new_snapshot = frozenset((a.label, a.value, a.by) for a in ch.approvals)
         if ch.waiting and ch._snapshot and new_snapshot != ch._snapshot:
             ch.waiting = False
-            try:
-                self.changes.save_changes()
-                self.changes_mtime = self.changes.mtime()
-            except OSError:
-                pass
+
         ch._snapshot = new_snapshot
         ch.submitted = is_submitted(data)
+
+        self.changes_mtime = self.changes.save_changes()
 
     def set_automerge(self, row: int) -> None:
         ch = self.changes.at(row - 1)
@@ -271,7 +269,7 @@ class App:
         for ch in candidates:
             ch.waiting = target
 
-        self.changes.save_changes()
+        self.changes_mtime = self.changes.save_changes()
 
         if target:
             self.status_msg = f"[yellow]All {len(candidates)} change(s) marked as waiting[/yellow]"
@@ -288,7 +286,7 @@ class App:
         for ch in candidates:
             ch.disabled = target
 
-        self.changes.save_changes()
+        self.changes_mtime = self.changes.save_changes()
 
         if target:
             self.status_msg = f"[yellow]All {len(candidates)} change(s) disabled[/yellow]"
@@ -320,7 +318,7 @@ class App:
         new_change = TrackedChange(number=number, host=host)
         self.changes.append(new_change)
         self.status_msg = f"[green]Added {number} @ {host}[/green]"
-        self.changes.save_changes()
+        self.changes_mtime = self.changes.save_changes()
 
     def delete_all_submitted(self) -> None:
         count = 0
@@ -329,7 +327,7 @@ class App:
                 count += 1
                 ch.deleted = True
 
-        self.changes.save_changes()
+        self.changes_mtime = self.changes.save_changes()
 
         if count > 0:
             self.status_msg = f"[red]{count} submitted change(s) marked for deletion[/red]"
@@ -384,7 +382,7 @@ class App:
 
         if added:
             self.status_msg = f"[green]Added {added} change(s)[/green]"
-            self.changes.save_changes()
+            self.changes_mtime = self.changes.save_changes()
             self._start_refresh()
         else:
             self.status_msg = f"[dim] No new changes for {email} on {self.config.default_host}[/dim]"
