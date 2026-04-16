@@ -1,6 +1,5 @@
 import datetime
 import os
-from re import escape
 import select
 import sys
 import termios

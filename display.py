@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from typing import Iterable
 
 from rich.console import Group
@@ -6,6 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from changes import Changes
 from models import ApprovalEntry, TrackedChange
 
 
@@ -47,13 +49,14 @@ def approvals_to_text(approvals: Iterable[ApprovalEntry]) -> Text:
 
 
 def build_table(
-    changes: list[TrackedChange],
-    config_path: str,
+    changes: Changes,
+    config_path: Path,
     interval: float,
     status_msg: str = "",
     ssh_requests: int = 0,
     hints: str = "",
 ) -> Table:
+    # TODO config.py should produce message with config summary
     caption = f"[dim]config:[/dim] {config_path} | [dim]interval:[/dim] {interval}s"
 
     if hints:
@@ -77,7 +80,7 @@ def build_table(
     table.add_column("Comments", no_wrap=False, ratio=50)
     table.add_column("Approvals", no_wrap=False, ratio=25)
 
-    for idx, ch in enumerate(changes, 1):
+    for idx, ch in enumerate(changes.get_all(), 1):
         styles = {
             "idx": "dim",
             "number": "magenta",
@@ -89,7 +92,7 @@ def build_table(
         }
 
         if ch.error:
-            table.add_row(str(idx), "", Text(ch.error, style="red"), "", "", "")
+            table.add_row(str(idx), str(ch.number), Text(ch.error, style="red"), "", "", "")
             continue
 
         if ch.url:

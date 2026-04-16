@@ -6,57 +6,67 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty, Queue
 from threading import Event, Lock, Thread
-from typing import Iterable
+from typing import Iterable, Literal
 
 from rich.console import Console, Group
 from rich.live import Live
 
 import gerrit
+from changes import Changes
 from config import (
-    add_change_to_config,
-    bulk_update_config_field,
-    config_mtime,
-    load_changes,
-    load_toml_config,
-    remove_changes_from_config,
-    resolve_editor,
-    resolve_email,
-    update_config_comments,
-    update_config_field,
+    AppConfig,
 )
 from display import build_header, build_layout, build_table
 from gerrit import is_submitted, query_approvals, query_open_changes
 from input_handler import InputHandler
-from models import ApprovalEntry, TrackedChange
-from utils import AtomicCounter, NoEcho
+from models import ApprovalEntry, GerritInstance, TrackedChange
+from utils import Arrow, AtomicCounter, NoEcho
+
+_console = Console()
+
+EditorTarget = Literal["changes", "config"]
+
+
+def _store_result(ch: TrackedChange | None, data: dict) -> None:
+    if ch is None:
+        return
+
+    if "error" in data:
+        ch.error = data["error"]
+        return
+
+    ch.error = None
+
+    ch.subject = data.get("subject")
+    ch.project = data.get("project")
+    ch.url = data.get("url")
+    patch_sets = data.get("patchSets", [])
+    if patch_sets:
+        ch.current_revision = patch_sets[-1].get("revision")
+        raw = patch_sets[-1].get("approvals", [])
+        ch.approvals = [
+            ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", "")) for a in raw
+        ]
+    else:
+        ch.approvals = []
+
+    new_snapshot = frozenset((a.label, a.value, a.by) for a in ch.approvals)
+    if ch.waiting and ch._snapshot and new_snapshot != ch._snapshot:
+        ch.waiting = False
+
+    ch._snapshot = new_snapshot
+    ch.submitted = is_submitted(data)
 
 
 class App:
-    def __init__(
-        self,
-        config_path: Path,
-        changes_path: Path,
-        changes: list[TrackedChange],
-        interval: int,
-        default_host: str | None,
-        default_port: int | None = None,
-        email: str | None = None,
-        editor: str | None = None,
-    ) -> None:
-        self.config_path = config_path
-        self.changes_path = changes_path
-        self.console = Console()
+    def __init__(self, config: AppConfig, changes: Changes) -> None:
+        self.config = config
         self.changes = changes
-        self.interval = interval
-        self.default_host = default_host
-        self.default_port = default_port
-        self.email = email
-        self.editor = editor
-        self.toml_mtime: float = config_mtime(config_path)
-        self.changes_mtime: float = config_mtime(changes_path)
+
         self.status_msg: str = ""
+        self.exit_msg: str = ""
         self.running: bool = True
-        self.key_queue: Queue[str] = Queue()
+        self.key_queue: Queue[str | Arrow] = Queue()
         self.input: InputHandler = InputHandler(self)
         self.refresh_done = Event()
         self.refresh_done.set()
@@ -64,129 +74,115 @@ class App:
         self.seconds_since_refresh: float = 0.0
         self.manual_refresh_lock = Lock()
         self.manual_refresh_counter = AtomicCounter()
-        self.pending_editor: str | None = None
+        self.pending_editor: EditorTarget | None = None
         self._pause_keys = Event()
+
+        self.config_mtime = self.config.mtime()
+        self.changes_mtime = self.changes.mtime()
 
     # --- Query methods ---
 
-    def do_queries(self) -> None:
-        """Run SSH queries for all non-submitted, non-deleted, non-disabled changes."""
-        self.status_msg = ""
-        pending = [ch for ch in self.changes if not ch.submitted and not ch.deleted and not ch.disabled]
+    def _query(self, ch: TrackedChange) -> tuple[TrackedChange | None, dict]:
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            return None, {}
 
-        def _query(ch: TrackedChange) -> tuple[TrackedChange, dict]:
-            return ch, query_approvals(ch.hash, ch.host, ch.port)
+        return ch, query_approvals(str(ch.number), instance.host, instance.port)
 
-        with ThreadPoolExecutor(max_workers=len(pending) or 1) as pool:
-            for ch, data in pool.map(_query, pending):
-                if "patchSets" in data:
-                    latest_rev = data.get("patchSets")[-1].get("revision", "<no rev>")
-                    if latest_rev != ch.hash and not latest_rev.startswith(ch.hash):
-                        self.status_msg += (
-                            f"[orange]Warning: new patchset for {data.get('number')}: {latest_rev}[/orange]"
-                        )
-                self._store_result(ch, data)
+    def _do_query(self, changes: list[TrackedChange]) -> None:
+        if not changes:
+            return
+
+        with ThreadPoolExecutor(max_workers=len(changes) or 1) as pool:
+            for ch, data in pool.map(self._query, changes):
+                _store_result(ch, data)
+
+        self.changes_mtime = self.changes.save_changes()
+
+    def query_active_changes(self) -> None:
+        self._do_query(self.changes.get_running())
 
     def query_disabled_once(self) -> None:
-        """One-shot query for disabled changes that have no cached data yet."""
-        need = [ch for ch in self.changes if ch.disabled and ch.number is None]
-        if not need:
-            return
-
-        def _query(ch: TrackedChange) -> tuple[TrackedChange, dict]:
-            return ch, query_approvals(ch.hash, ch.host, ch.port)
-
-        with ThreadPoolExecutor(max_workers=len(need)) as pool:
-            for ch, data in pool.map(_query, need):
-                self._store_result(ch, data)
-
-    def _store_result(self, ch: TrackedChange, data: dict) -> None:
-        """Parse raw Gerrit SSH response dict into typed fields on ch."""
-        if "error" in data:
-            ch.error = data["error"]
-            return
-        ch.error = None
-        ch.number = data.get("number")
-        ch.subject = data.get("subject")
-        ch.project = data.get("project")
-        ch.url = data.get("url")
-        patch_sets = data.get("patchSets", [])
-        if patch_sets:
-            raw = patch_sets[-1].get("approvals", [])
-            ch.approvals = [
-                ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", "")) for a in raw
-            ]
-        else:
-            ch.approvals = []
-        new_snapshot = frozenset((a.label, a.value, a.by) for a in ch.approvals)
-        if ch.waiting and ch._snapshot and new_snapshot != ch._snapshot:
-            ch.waiting = False
-            try:
-                self.changes_mtime = update_config_field(self.changes_path, ch.hash, "waiting", False)
-            except OSError:
-                pass
-        ch._snapshot = new_snapshot
-        ch.submitted = is_submitted(data)
+        # TODO: when the real caching system is implemented,
+        # we should limit the querying to disabled changes without data
+        self._do_query(self.changes.get_disabled())
 
     def set_automerge(self, row: int) -> None:
-        ch = self.changes[row - 1]
-        if ch.number is None:
-            self.status_msg = f"[red]cannot set automerge for change #{row}[/red]"
+        ch = self.changes.at(row - 1)
+
+        if ch is None:
+            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
             return
 
-        result = gerrit.query_set_automerge(ch.hash, ch.host, ch.port)
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot set automerge for change #{row} - no current revision known[/red]"
+            return
+
+        if any(approval.label == "Automerge" for approval in ch.approvals):
+            self.status_msg = f"[yellow]Label Automerge already exists for change #{row}[/yellow]"
+            return
+
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            return
+
+        result = gerrit.query_set_automerge(ch.current_revision, instance.host, instance.port)
+
         if "error" in result:
             self.status_msg = f"[red]Automerge failed for change #{row}: {result['error']}[/red]"
         else:
             self.status_msg = f"[green]Automerge +1 set for change #{row}[/green]"
-            # Force refresh to show updated approvals and submitted status
             self._start_refresh()
 
     # --- Config methods ---
 
     def reload_config(self, force: bool = False) -> bool:
         """Check both files for changes and reload if needed. Returns True if either was reloaded."""
-        new_toml_mtime = config_mtime(self.config_path)
-        new_changes_mtime = config_mtime(self.changes_path)
-        if not force and new_toml_mtime <= self.toml_mtime and new_changes_mtime <= self.changes_mtime:
+        new_toml_mtime = self.config.mtime()
+        new_changes_mtime = self.changes.mtime()
+
+        if not force and new_toml_mtime <= self.config_mtime and new_changes_mtime <= self.changes_mtime:
             return False
         try:
-            cfg = load_toml_config(self.config_path)
-            self.interval = cfg.interval
-            self.default_host = cfg.default_host
-            self.default_port = cfg.default_port
-            self.email = cfg.email
-            self.toml_mtime = new_toml_mtime
+            self.config.load_config()
+            self.config_mtime = new_toml_mtime
 
-            self.changes = load_changes(self.changes_path, cfg.default_host, cfg.default_port)
+            self.changes.load_changes()
             self.changes_mtime = new_changes_mtime
 
             self.status_msg = "[green]Config reloaded[/green]"
             return True
         except Exception as exc:
             self.status_msg = f"[red]Config error: {exc}[/red]"
-            self.toml_mtime = new_toml_mtime
+            self.config_mtime = new_toml_mtime
             self.changes_mtime = new_changes_mtime
             return False
 
     # --- Editor methods ---
 
     def open_config_in_editor(self) -> None:
-        """Schedule the TOML config file to be opened in the editor."""
         self.pending_editor = "config"
 
-    def open_approvals_in_editor(self) -> None:
-        """Schedule the approvals/changes file to be opened in the editor."""
-        self.pending_editor = "approvals"
+    def open_changes_in_editor(self) -> None:
+        self.pending_editor = "changes"
 
-    def _run_editor(self, target: str) -> None:
-        """Open target file in the configured editor synchronously."""
-        editor_cmd = resolve_editor(self.editor)
+    def _run_editor(self, target: EditorTarget) -> None:
+        editor_cmd = self.config.editor
+
         if not editor_cmd:
             self.status_msg = "[red]No editor configured. Set EDITOR env var or 'editor' in config.[/red]"
             return
 
-        path = self.config_path if target == "config" else self.changes_path
+        _targets: dict[EditorTarget, Path] = {
+            "config": self.config.path,
+            "changes": self.changes.path,
+        }
+
+        path = _targets.get(target)
+
+        if not path:
+            raise ValueError(f"Unknown editor target {target}")
 
         # Pause the key reader thread so it doesn't compete with the editor for stdin
         self._pause_keys.set()
@@ -195,11 +191,10 @@ class App:
 
         no_echo = NoEcho.instance
         if no_echo is not None:
-            # Restore normal (cooked) terminal mode so the editor has full control
             no_echo.disable()
 
         try:
-            cmd = shlex.split(editor_cmd) + [str(path)]
+            cmd = [*shlex.split(editor_cmd), str(path)]
             subprocess.run(cmd, check=False)
         except (FileNotFoundError, OSError) as exc:
             self.status_msg = f"[red]Failed to open editor '{editor_cmd}': {exc}[/red]"
@@ -222,103 +217,102 @@ class App:
         header = build_header(ssh_requests=gerrit.ssh_request_count)
         table = build_table(
             self.changes,
-            str(self.config_path),
-            self.interval,
+            self.config.path,
+            self.config.interval,
             self.status_msg,
-            ssh_requests=gerrit.ssh_request_count,
-            hints=self.input.hints(),
+            gerrit.ssh_request_count,
+            self.input.hints(),
         )
         return build_layout(header, table, prompt=prompt_msg)
 
     def visual_update(self, live: Live) -> None:
-        """Redraw the layout using cached results (no SSH queries)."""
-        live.update(self.build(self.input.prompt(len(self.changes))))
+        live.update(self.build(self.input.prompt()))
 
     # --- AppContext interface (called by InputHandler) ---
 
     def toggle_waiting(self, row: int) -> None:
-        ch = self.changes[row - 1]
-        if ch.submitted:
-            self.status_msg = f"[dim]#{row} already submitted[/dim]"
-        elif ch.waiting:
-            ch.waiting = False
-            try:
-                self.changes_mtime = update_config_field(self.changes_path, ch.hash, "waiting", False)
-            except OSError:
-                pass
-            self.status_msg = f"[yellow]#{row} no longer waiting[/yellow]"
-        else:
-            ch.waiting = True
-            try:
-                self.changes_mtime = update_config_field(self.changes_path, ch.hash, "waiting", True)
-            except OSError:
-                pass
-            self.status_msg = f"[yellow]#{row} marked as waiting[/yellow]"
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            ch.waiting = not ch.waiting
+
+            if ch.waiting:
+                self.status_msg = f"[yellow]#{row} marked as waiting[/yellow]"
+            else:
+                self.status_msg = f"[yellow]#{row} no longer waiting[/yellow]"
+
+        self.changes_mtime = self.changes.mtime()
 
     def toggle_deleted(self, row: int) -> None:
-        ch = self.changes[row - 1]
-        ch.deleted = not ch.deleted
-        if ch.deleted:
-            self.status_msg = f"[red]#{row} marked for deletion[/red]"
-        else:
-            self.status_msg = f"[green]#{row} restored[/green]"
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            ch.deleted = not ch.deleted
+
+            if ch.deleted:
+                self.status_msg = f"[red]#{row} marked for deletion[/red]"
+            else:
+                self.status_msg = f"[green]#{row} restored[/green]"
+
+        self.changes_mtime = self.changes.mtime()
 
     def toggle_disabled(self, row: int) -> None:
-        ch = self.changes[row - 1]
-        if ch.disabled:
-            ch.disabled = False
-            try:
-                self.changes_mtime = update_config_field(self.changes_path, ch.hash, "disabled", False)
-            except OSError:
-                pass
-            self.status_msg = f"[green]#{row} re-enabled[/green]"
-        else:
-            ch.disabled = True
-            try:
-                self.changes_mtime = update_config_field(self.changes_path, ch.hash, "disabled", True)
-            except OSError:
-                pass
-            self.status_msg = f"[yellow]#{row} disabled[/yellow]"
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            ch.disabled = not ch.disabled
+
+            if ch.disabled:
+                self.status_msg = f"[yellow]#{row} disabled[/yellow]"
+            else:
+                self.status_msg = f"[green]#{row} re-enabled[/green]"
+
+        self.changes_mtime = self.changes.mtime()
 
     def toggle_all_waiting(self) -> None:
-        candidates = [ch for ch in self.changes if not ch.deleted and not ch.disabled]
+        candidates = self.changes.get_active()
         if not candidates:
-            self.status_msg = "[dim]No changes to toggle[/dim]"
+            self.status_msg = "[dim]No active changes to toggle[/dim]"
             return
+
         target = not all(ch.waiting for ch in candidates)
-        updates = {ch.hash: ("waiting", target) for ch in candidates if ch.waiting != target}
         for ch in candidates:
             ch.waiting = target
-        if updates:
-            try:
-                self.changes_mtime = bulk_update_config_field(self.changes_path, updates)
-            except OSError:
-                pass
+
+        self.changes_mtime = self.changes.save_changes()
+
         if target:
             self.status_msg = f"[yellow]All {len(candidates)} change(s) marked as waiting[/yellow]"
         else:
             self.status_msg = f"[yellow]All {len(candidates)} change(s) no longer waiting[/yellow]"
 
     def toggle_all_disabled(self) -> None:
-        candidates = [ch for ch in self.changes if not ch.deleted]
+        candidates = self.changes.get_active()
         if not candidates:
-            self.status_msg = "[dim]No changes to toggle[/dim]"
+            self.status_msg = "[dim]No active changes to toggle[/dim]"
             return
+
         target = not all(ch.disabled for ch in candidates)
-        updates = {ch.hash: ("disabled", target) for ch in candidates if ch.disabled != target}
         for ch in candidates:
             ch.disabled = target
-        if updates:
-            try:
-                self.changes_mtime = bulk_update_config_field(self.changes_path, updates)
-            except OSError:
-                pass
+
+        self.changes_mtime = self.changes.save_changes()
+
         if target:
             self.status_msg = f"[yellow]All {len(candidates)} change(s) disabled[/yellow]"
         else:
             self.status_msg = f"[green]All {len(candidates)} change(s) re-enabled[/green]"
 
     def refresh_all(self) -> None:
+        # I know this is not a obvious place for cleaning status msg but I want to have easy way for it
+        self.status_msg = ""
+
         if self.manual_refresh_counter.value() >= 5:
             self.status_msg = "[red]Manual refresh limit reached[/red]"
             return
@@ -339,148 +333,148 @@ class App:
                     self.manual_refresh_counter.reset()
                     return
 
-    def add_change(self, commit_hash: str, host: str) -> None:
-        new_change = TrackedChange(host=host, hash=commit_hash)
+    def add_change(self, number: int, instance: str) -> None:
+        new_change = TrackedChange(number=number, instance=instance)
         self.changes.append(new_change)
-        try:
-            self.changes_mtime = add_change_to_config(self.changes_path, commit_hash, host)
-        except OSError:
-            pass
-        self.status_msg = f"[green]Added {commit_hash[:7]} @ {host}[/green]"
+        self.status_msg = f"[green]Added {number} @ {instance}[/green]"
+        self.changes_mtime = self.changes.save_changes()
 
     def delete_all_submitted(self) -> None:
         count = 0
-        for ch in self.changes:
-            if ch.submitted and not ch.deleted:
-                ch.deleted = True
+        for ch in self.changes.get_submitted():
+            if not ch.deleted:
                 count += 1
-        if count:
+                ch.deleted = True
+
+        if count > 0:
             self.status_msg = f"[red]{count} submitted change(s) marked for deletion[/red]"
+            self.changes_mtime = self.changes.save_changes()
         else:
             self.status_msg = "[dim]No submitted changes to delete[/dim]"
 
     def purge_deleted(self) -> None:
-        deleted_hashes = {ch.hash for ch in self.changes if ch.deleted}
-        if deleted_hashes:
-            try:
-                self.changes_mtime = remove_changes_from_config(self.changes_path, deleted_hashes)
-            except OSError:
-                pass
-            self.changes[:] = [ch for ch in self.changes if not ch.deleted]
-            self.status_msg = f"[red]{len(deleted_hashes)} change(s) permanently removed[/red]"
+        count_before = self.changes.count()
+        self.changes.remove_all_deleted()
+        deleted_hashes = count_before - self.changes.count()
+
+        if deleted_hashes > 0:
+            self.status_msg = f"[red]{deleted_hashes} change(s) permanently removed[/red]"
+            self.changes_mtime = self.changes.save_changes()
         else:
             self.status_msg = "[dim]Nothing to purge[/dim]"
 
     def restore_all(self) -> None:
-        restored = sum(1 for ch in self.changes if ch.deleted)
-        for ch in self.changes:
-            ch.deleted = False
-        if restored:
-            self.status_msg = f"[green]{restored} change(s) restored[/green]"
+        count = 0
+        for ch in self.changes.get_deleted():
+            if ch.deleted:
+                count += 1
+                ch.deleted = False
+
+        if count > 0:
+            self.status_msg = f"[green]{count} change(s) restored[/green]"
+            self.changes_mtime = self.changes.save_changes()
         else:
             self.status_msg = "[dim]Nothing to restore[/dim]"
 
-    def fetch_open_changes(self) -> None:
-        """Fetch all open changes owned by the user and add new ones to the tracked list."""
-        email = resolve_email(self.email)
-        if not email:
-            self.status_msg = "[red]No email configured and git config user.email not available[/red]"
-            return
+    def _fetch_open_changes_from_instance(self, instance: GerritInstance) -> int:
+        host = instance.host
+        port = instance.port
+        email = self.config.resolve_email(instance)
 
-        results = query_open_changes(email, self.default_host or "", self.default_port)
-        existing_hashes = {ch.hash for ch in self.changes}
+        if not email:
+            self.status_msg = (
+                f"[red]Insufficient configuration for auto-fetching: email={email} host={host} port={port}[/red]"
+            )
+            return 0
+
+        results = query_open_changes(email, host, port)
+
         added = 0
+        numbers_in_changes = {ch.number for ch in self.changes.get_all()}
+
         for change_data in results:
             if change_data.get("wip"):
                 continue
-            patch_set = change_data.get("currentPatchSet", {})
-            commit_hash = patch_set.get("revision")
-            if not commit_hash:
+
+            number = change_data.get("number")
+
+            if number is None or number in numbers_in_changes:
                 continue
-            if commit_hash in existing_hashes:
-                continue
-            host = self.default_host or ""
-            try:
-                self.changes_mtime = add_change_to_config(self.changes_path, commit_hash, host)
-            except OSError:
-                pass
-            self.changes.append(TrackedChange(host=host, hash=commit_hash, port=self.default_port))
-            existing_hashes.add(commit_hash)
+
+            ch = TrackedChange(number=number, instance=instance.name)
+            _store_result(ch, change_data)
+            self.changes.append(ch)
+            numbers_in_changes.add(number)
             added += 1
+
+        return added
+
+    def fetch_open_changes(self) -> None:
+        added = 0
+
+        for instance in self.config.instances:
+            added += self._fetch_open_changes_from_instance(instance)
 
         if added:
             self.status_msg = f"[green]Added {added} change(s)[/green]"
+            self.changes_mtime = self.changes.save_changes()
             self._start_refresh()
         else:
-            self.status_msg = f"[dim] {len(results)} new changes found for {email} on {self.default_host}[/dim]"
+            self.status_msg = f"[dim] No new changes on {len(self.config.instances)} instances[/dim]"
+            pass
 
     def quit(self) -> None:
-        """Purge deleted changes from config, then stop the main loop."""
-        deleted_hashes = {ch.hash for ch in self.changes if ch.deleted}
-        if deleted_hashes:
-            try:
-                remove_changes_from_config(self.changes_path, deleted_hashes)
-            except OSError:
-                pass
+        self.changes.remove_all_deleted()
+        self.changes_mtime = self.changes.save_changes()
+        self.exit_msg = f"{len(self.changes.get_all())} change(s) saved. Bye!"
         self.running = False
 
+    # --- Comments ---
+
     def add_comment(self, row: int, text: str) -> None:
-        """Add a comment to a change."""
-        ch = self.changes[row - 1]
-        ch.comments.append(text)
-        try:
-            self.changes_mtime = update_config_comments(self.changes_path, ch.hash, ch.comments)
-        except OSError:
-            pass
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            ch.comments.append(text)
 
     def replace_all_comments(self, row: int, text: str) -> None:
-        """Replace all comments with a single comment."""
-        ch = self.changes[row - 1]
-        ch.comments = [text]
-        try:
-            self.changes_mtime = update_config_comments(self.changes_path, ch.hash, ch.comments)
-        except OSError:
-            pass
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            ch.comments = [text]
 
     def edit_last_comment(self, row: int, text: str) -> None:
-        """Edit the last comment on a change."""
-        ch = self.changes[row - 1]
-        if ch.comments:
-            ch.comments[-1] = text
-            try:
-                self.changes_mtime = update_config_comments(self.changes_path, ch.hash, ch.comments)
-            except OSError:
-                pass
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            if ch.comments:
+                ch.comments[-1] = text
 
     def delete_comment(self, row: int, comment_idx: int) -> None:
-        """Delete a specific comment from a change.
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
 
-        comment_idx is 1-based (user input: 1 means first comment).
-        """
-        if row < 1 or row > len(self.changes):
-            self.status_msg = f"[red]No change at index {row}[/red]"
-            return
-
-        ch = self.changes[row - 1]
-        # Convert 1-based comment index to 0-based array index
-        array_idx = comment_idx - 1
-        if 0 <= array_idx < len(ch.comments):
-            ch.comments.pop(array_idx)
-            try:
-                self.changes_mtime = update_config_comments(self.changes_path, ch.hash, ch.comments)
-            except OSError:
-                pass
-        else:
-            self.status_msg = f"[red]No comment at index {comment_idx}[/red]"
+            array_idx = comment_idx - 1
+            if 0 <= array_idx < len(ch.comments):
+                ch.comments.pop(array_idx)
+            else:
+                self.status_msg = f"[red]No comment at index {comment_idx}[/red]"
 
     def delete_all_comments(self, row: int) -> None:
-        """Delete all comments from a change."""
-        ch = self.changes[row - 1]
-        ch.comments.clear()
-        try:
-            self.changes_mtime = update_config_comments(self.changes_path, ch.hash, ch.comments)
-        except OSError:
-            pass
+        with self.changes.edit_change(row - 1) as ch:
+            if ch is None:
+                self.status_msg = f"[red]no change at index {row}[/red]"
+                return
+
+            ch.comments.clear()
 
     # --- Threading ---
 
@@ -501,7 +495,7 @@ class App:
     def _bg_refresh(self) -> None:
         """Background thread: run SSH queries then signal completion."""
         try:
-            self.do_queries()
+            self.query_active_changes()
         finally:
             self.refresh_done.set()
 
@@ -516,20 +510,19 @@ class App:
     # --- MCP helpers ---
 
     def get_changes(self) -> Iterable[TrackedChange]:
-        return self.changes
+        return self.changes.get_all()
 
     # --- Opem WebUI ---
 
     def open_change_webui(self, row: int) -> None:
-        ch = self.changes[row - 1]
+        ch = self.changes.at(row - 1)
 
-        if ch.number is None:
+        if not ch:
             self.status_msg = f"[red]cannot open change #{row}[/red]"
             return
 
-        url = ch.url
-        if url:
-            webbrowser.open(url)
+        if ch.url:
+            webbrowser.open(ch.url)
             self.status_msg = f"[green]opened change #{row} in browser[/green]"
         else:
             self.status_msg = f"[red]URL not found for change #{row}[/red]"
@@ -538,7 +531,7 @@ class App:
 
     def run(self) -> None:
         """Run initial queries, start threads, enter main loop."""
-        self.do_queries()
+        self.query_active_changes()
         self.query_disabled_once()
 
         reader_thread = Thread(target=self._key_reader, daemon=True)
@@ -546,8 +539,8 @@ class App:
 
         try:
             with Live(
-                self.build(self.input.prompt(len(self.changes))),
-                console=self.console,
+                self.build(self.input.prompt()),
+                console=_console,
                 refresh_per_second=10,
                 screen=True,
             ) as live:
@@ -568,10 +561,18 @@ class App:
                         except Empty:
                             break
                         self.input.handle_key(key)
+                        if not self.running:
+                            break
+
                         needs_visual_update = True
 
+                    if not self.running:
+                        break
+
                     if self.pending_editor:
-                        target, self.pending_editor = self.pending_editor, None
+                        target = self.pending_editor
+                        self.pending_editor = None
+
                         live.stop()
                         try:
                             self._run_editor(target)
@@ -584,7 +585,8 @@ class App:
                         self._start_refresh()
                         self.visual_update(live)
                         needs_visual_update = False
-                    elif self.seconds_since_refresh >= self.interval:
+
+                    elif self.seconds_since_refresh >= self.config.interval:
                         self.status_msg = ""
                         self._start_refresh()
                         self.visual_update(live)
@@ -595,4 +597,4 @@ class App:
         except KeyboardInterrupt:
             pass
         finally:
-            self.console.print("\n[dim]Stopped.[/dim]")
+            _console.print(f"\n[dim]Stopped. {self.exit_msg}[/dim]")

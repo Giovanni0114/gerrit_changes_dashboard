@@ -3,6 +3,7 @@
         {
             "name": "get_changes",
             "description": "Return active tracked changes (not deleted, not disabled).",
+            "status": "implemented",
             "tags": [
                 "read",
                 "default"
@@ -10,29 +11,41 @@
             "output_schema": {
                 "type": "object",
                 "properties": {
-                    "api_version": {
-                        "type": "string"
-                    },
                     "changes": {
                         "type": "array",
                         "items": {
                             "$ref": "#/definitions/change"
                         }
-                    },
-                    "count": {
-                        "type": "integer"
                     }
                 },
                 "required": [
-                    "api_version",
-                    "changes",
-                    "count"
+                    "changes"
+                ]
+            }
+        },
+        {
+            "name": "quit",
+            "description": "Ask the application to quit (will persist pending removals).",
+            "status": "implemented",
+            "tags": [
+                "action"
+            ],
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "message"
                 ]
             }
         },
         {
             "name": "get_all_changes",
             "description": "Return all tracked changes, including disabled and deleted.",
+            "status": "planned",
             "tags": [
                 "read"
             ],
@@ -57,7 +70,8 @@
         },
         {
             "name": "get_change",
-            "description": "Return a single change identified by host+hash (both required).",
+            "description": "Return a single change identified by number+host (both required).",
+            "status": "planned",
             "tags": [
                 "read"
             ],
@@ -79,10 +93,26 @@
         },
         {
             "name": "add_change",
-            "description": "Add a change to the tracked list and persist to config.",
+            "description": "Add a change to the tracked list and persist to the changes file.",
+            "status": "planned",
             "tags": [
                 "create"
             ],
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "number": {
+                        "type": "integer"
+                    },
+                    "host": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "number",
+                    "host"
+                ]
+            },
             "output_schema": {
                 "type": "object",
                 "properties": {
@@ -106,6 +136,7 @@
         {
             "name": "set_waiting",
             "description": "Set, clear or toggle the 'waiting' flag for a change.",
+            "status": "planned",
             "tags": [
                 "update"
             ],
@@ -135,7 +166,8 @@
         },
         {
             "name": "set_disabled",
-            "description": "Enable/disable a change (persisted).",
+            "description": "Enable/disable a change (persisted to changes file).",
+            "status": "planned",
             "tags": [
                 "update"
             ],
@@ -166,6 +198,7 @@
         {
             "name": "soft_delete_change",
             "description": "Mark a change as deleted in-memory. Use purge_deleted to permanently remove.",
+            "status": "planned",
             "tags": [
                 "delete"
             ],
@@ -187,7 +220,8 @@
         },
         {
             "name": "purge_deleted",
-            "description": "Permanently remove all changes marked deleted from the config file.",
+            "description": "Permanently remove all changes marked deleted from the changes file.",
+            "status": "planned",
             "tags": [
                 "delete",
                 "danger"
@@ -211,6 +245,7 @@
         {
             "name": "delete_change",
             "description": "Permanently remove a single change (may internally mark+purge).",
+            "status": "planned",
             "tags": [
                 "delete",
                 "danger"
@@ -224,20 +259,21 @@
                     "removed": {
                         "type": "boolean"
                     },
-                    "hash": {
-                        "type": "string"
+                    "number": {
+                        "type": "integer"
                     }
                 },
                 "required": [
                     "api_version",
                     "removed",
-                    "hash"
+                    "number"
                 ]
             }
         },
         {
             "name": "restore_change",
             "description": "Restore a single previously marked-deleted change.",
+            "status": "planned",
             "tags": [
                 "update"
             ],
@@ -264,6 +300,7 @@
         {
             "name": "restore_all",
             "description": "Restore all changes that are marked as deleted.",
+            "status": "planned",
             "tags": [
                 "update"
             ],
@@ -286,6 +323,7 @@
         {
             "name": "refresh_all",
             "description": "Trigger a manual refresh of SSH queries (subject to app limits).",
+            "status": "planned",
             "tags": [
                 "action"
             ],
@@ -311,6 +349,7 @@
         {
             "name": "set_automerge",
             "description": "Request Gerrit to set automerge (+1) for a change.",
+            "status": "planned",
             "tags": [
                 "action",
                 "danger"
@@ -334,6 +373,7 @@
         {
             "name": "open_change_webui",
             "description": "Open the change URL in the application environment.",
+            "status": "planned",
             "tags": [
                 "action"
             ],
@@ -358,28 +398,6 @@
                     "opened"
                 ]
             }
-        },
-        {
-            "name": "quit",
-            "description": "Ask the application to quit (will persist pending removals).",
-            "tags": [
-                "action"
-            ],
-            "output_schema": {
-                "type": "object",
-                "properties": {
-                    "api_version": {
-                        "type": "string"
-                    },
-                    "message": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "api_version",
-                    "message"
-                ]
-            }
         }
     ],
     "definitions": {
@@ -390,7 +408,15 @@
                     "type": "string"
                 },
                 "hash": {
-                    "type": "string"
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "description": "Current patchset revision (TrackedChange.current_revision). May be null if not yet fetched from Gerrit."
+                },
+                "number": {
+                    "type": "integer",
+                    "description": "Gerrit change number. Primary identifier alongside host."
                 },
                 "waiting": {
                     "type": "boolean"
@@ -407,12 +433,6 @@
                 "subject": {
                     "type": [
                         "string",
-                        "null"
-                    ]
-                },
-                "number": {
-                    "type": [
-                        "integer",
                         "null"
                     ]
                 },
@@ -454,12 +474,12 @@
             "required": [
                 "host",
                 "hash",
+                "number",
                 "waiting",
                 "disabled",
                 "deleted",
                 "submitted",
                 "subject",
-                "number",
                 "project",
                 "url",
                 "approvals"

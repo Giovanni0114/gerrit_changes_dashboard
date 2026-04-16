@@ -14,7 +14,7 @@ inside the EPIC folder.
 
 ## 001 | Split config and changes storage — **DONE**
 
-The single `approvals.json` mixes app configuration with the tracked changes list.
+The single `changes.json` mixes app configuration with the tracked changes list.
 I want a separate config file (TOML format) for settings like interval, hosts, and
 default options, and a separate JSON file just for the changes.
 
@@ -179,7 +179,7 @@ when index not inb range is used the app is crashed
 
 ## 009 | Add keybind to open config/approvals in default editor — **DONE**
 
-This should be implemented after 001 when approvals.json file will be splitd
+This should be implemented after 001 when changes.json file will be splitd
 
 There should be two new keybinds
 
@@ -232,4 +232,9 @@ planned refresh.
 
 I would like to be able to create some sort of overlay screen, floating window,
 or some similar effect to show additional information on tab click
+
+
+## 012 | Change "approval" to "changes" whenever it fits
+
+In this project i use "approval" a lot, I think "changes" is more fitting
 

@@ -16,6 +16,19 @@ Gerrit Approvals Dashboard is a terminal-based monitoring tool built with
 Python 3.12+ and Rich. It displays real-time approval status for Gerrit code
 reviews via SSH queries.
 
+Configuration is split into two files:
+- **TOML config** (`config.toml`) — app settings: interval, default host/port, email, editor,
+  and path to the changes file. Managed by `config.py` (`AppConfig` class).
+- **JSON changes file** (`changes.json`) — tracked Gerrit changes. Managed by `changes.py`
+  (`Changes` class). **Not intended for manual editing** — all mutations happen through the
+  TUI (add, delete, toggle flags, comments, fetch) and are persisted automatically via
+  `Changes.save_changes()`. Manual editing is still possible but is a fallback, not the
+  primary workflow.
+
+The TUI provides keybind-driven change management (`<Space>` leader key), including
+adding changes, auto-fetching open changes from Gerrit, toggling waiting/disabled/deleted
+states, managing comments, and purging submitted changes.
+
 
 ## Build & Development Commands
 
@@ -33,9 +46,9 @@ uv run ruff format .                          # Format code
 
 ### Running the Application
 ```bash
-python3 gerrit_approvals.py                  # Run dashboard with default config
-python3 gerrit_approvals.py <config_file>    # Run with custom config
-python3 gerrit_approvals.py --init           # Generate example config
+python3 gerrit_changes_dashboard.py                  # Run with default config.toml
+python3 gerrit_changes_dashboard.py <config_file>    # Run with custom TOML config
+python3 gerrit_changes_dashboard.py --init           # Generate example config.toml
 ```
 
 ### Testing
@@ -45,9 +58,13 @@ uv run pytest        # Run all tests
 uv run pytest -v     # Verbose output
 ```
 
-Tests live in `tests/`. Run them after every change to catch regressions.
-The suite covers `input_handler.py` (key routing, input collection, action dispatch)
-and `config.py` (JSON load/save functions).
+> [!IMPORTANT]
+> ITS TOO EARLY TO CREATE TESTS
+> This app have such rapid development that creating tests that really catches
+> important stuff is generally impossible.
+> After creating version that will not be completly changed every week we will
+> create tests. You can create temporary tests for the sake of control
+> development, but don't commit anything for now
 
 ## Code Style Guidelines
 
@@ -64,7 +81,7 @@ and `config.py` (JSON load/save functions).
   
   from rich.console import Console
   
-  from models import Change
+  from models import TrackedChange
   from utils import log
   ```
 
@@ -82,10 +99,10 @@ and `config.py` (JSON load/save functions).
 - Annotate class attributes in `__init__`
 - Example:
   ```python
-  def load_config(path: Path) -> tuple[list[Change], int, str | None]:
-      """Docstring describing function."""
-      data = json.loads(path.read_text())
-      return changes, interval, default_host
+  def load_changes(self, default_host: str | None, default_port: int | None) -> None:
+      """Load tracked changes from JSON file, applying defaults."""
+      data = json.loads(self.path.read_text(encoding="utf-8"))
+      self.changes = [TrackedChange(**entry) for entry in data]
   ```
 
 ### Naming Conventions
@@ -127,7 +144,7 @@ and `config.py` (JSON load/save functions).
 - Example: `_log_lock` protects concurrent log writes
 
 ### Dataclasses & Type Safety
-- Prefer `@dataclass` for simple data structures (see `Change` model)
+- Prefer `@dataclass` for simple data structures (see `TrackedChange` model)
 - Use `Protocol` for structural typing (e.g., `AppContext`)
 - Always provide default values with type hints
 
@@ -154,9 +171,14 @@ and `config.py` (JSON load/save functions).
 ## Key Patterns
 
 ### Config Management
-- All config is JSON-based (`approvals.json`)
-- Watch config file via `mtime` polling (see `config_mtime()`)
-- Validate on load with clear error messages
+- Configuration is split into two files:
+  - **TOML config** (`config.toml`) — app settings, read-only at runtime. Managed by `config.py` (`AppConfig`).
+  - **JSON changes file** (`changes.json`) — tracked changes. Managed by `changes.py` (`Changes`).
+- The JSON changes file is **not intended for manual editing**. All mutations happen through
+  the TUI and are persisted automatically via `Changes.save_changes()`.
+- Use `Changes.edit_change()` / `edit_changes()` context managers for safe single/batch
+  mutations — they auto-save on exit.
+- Watch both files via `mtime` polling; external edits trigger auto-reload.
 
 ### Thread-Safe State
 - Use `AtomicCounter` for simple numeric state
@@ -238,8 +260,9 @@ Each EPIC folder contains:
 5. Ensure ruff compliance: `uv run ruff check <file> --fix`
 
 ### Modifying Config Loading
-1. Update JSON schema in `approvals.schema.json` if structure changes
-2. Update validation in `load_config()` in `config.py`
+1. For TOML settings: update `AppConfig.load_config()` in `config.py`
+2. For changes file structure: update `Changes.load_changes()` / `save_changes()` in `changes.py`
+   and the `TrackedChange` dataclass in `models.py`
 3. Test with invalid configs to verify error messages
 4. Document new fields in README.md
 

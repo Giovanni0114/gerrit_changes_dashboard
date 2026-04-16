@@ -1,112 +1,17 @@
-import json
 import os
 import subprocess
 import tomllib
-from collections.abc import Mapping
-from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Literal
 
-from models import TrackedChange
+from models import GerritInstance
 
 DEFAULT_INTERVAL = 30
-DEFAULT_CHANGES_FILENAME = "approvals.json"
-DEFAULT_DEFAULT_PORT = 22
+DEFAULT_CHANGES_FILENAME = "changes.json"
 
 
-@dataclass
-class AppConfig:
-    interval: int
-    default_host: str | None
-    default_port: int | None
-    email: str | None
-    changes_file: Path
-    editor: str | None = None
-
-
-def load_toml_config(path: Path) -> AppConfig:
-    with path.open("rb") as fh:
-        data = tomllib.load(fh)
-
-    if "config" not in data:
-        raise ValueError(f"Missing [config] section in {path}")
-
-    config_data = data["config"]
-
-    try:
-        interval = int(config_data.get("interval", DEFAULT_INTERVAL))
-    except Exception as ex:
-        raise ValueError(f"Invalid interval value: {config_data.get('interval')}") from ex
-
-    if interval < 1:
-        raise ValueError(f"interval must be >= 1, got {interval}")
-
-    try:
-        default_port = int(config_data.get("default_port", DEFAULT_DEFAULT_PORT))
-    except Exception as ex:
-        raise ValueError(f"Invalid default_port: {config_data.get('interval')}") from ex
-
-    changes_file_str = config_data.get("changes_file", DEFAULT_CHANGES_FILENAME)
-    changes_file = (path.parent / changes_file_str).resolve()
-
-    return AppConfig(
-        interval=interval,
-        default_host=config_data.get("default_host"),
-        default_port=default_port,
-        email=config_data.get("default_email"),
-        changes_file=changes_file,
-        editor=config_data.get("editor"),
-    )
-
-
-def load_changes(path: Path, default_host: str | None, default_port: int | None) -> list[TrackedChange]:
-    """Load the tracked changes list from a JSON file.
-
-    The file must contain a top-level `changes` array. Settings keys are ignored.
-
-    :param path: Path to the changes JSON file.
-    :param default_host: Host applied to entries that omit ``host``.
-    :param default_port: Port applied to entries that omit ``port``.
-    :raises json.JSONDecodeError: On invalid JSON.
-    :raises ValueError: If a change has no host and no default_host.
-    """
-    data = json.loads(path.read_text(encoding="utf-8"))
-    changes = []
-    for entry in data.get("changes", []):
-        commit_hash = entry.get("hash")
-        if not commit_hash:
-            raise ValueError(f"Change entry missing required 'hash' field: {entry}")
-
-        host = entry.get("host", default_host)
-        if not host:
-            raise ValueError(f"Change '{commit_hash}' has no host and no default_host is set")
-
-        try:
-            port = int(entry.get("port", default_port))
-        except (ValueError, TypeError) as ex:
-            raise ValueError(f"Invalid port for change '{commit_hash}': {entry.get('port')}") from ex
-
-        changes.append(
-            TrackedChange(
-                hash=commit_hash,
-                host=host,
-                port=port,
-                waiting=bool(entry.get("waiting", False)),
-                disabled=bool(entry.get("disabled", False)),
-                comments=entry.get("comments", []),
-            )
-        )
-    return changes
-
-
-def resolve_email(config_email: str | None) -> str | None:
-    """Resolve user email: config value takes priority, then git config fallback.
-
-    Returns None if no email can be determined.
-    """
-    if config_email is not None:
-        return config_email
-
+@lru_cache(maxsize=1)
+def _get_email_from_git_config() -> str | None:
     try:
         result = subprocess.run(
             ["git", "config", "user.email"],
@@ -122,112 +27,141 @@ def resolve_email(config_email: str | None) -> str | None:
         return None
 
 
-def resolve_editor(config_editor: str | None) -> str | None:
-    """Resolve editor command: config value takes priority, then EDITOR env var.
+class AppConfig:
+    path: Path
 
-    Returns None if no editor can be determined.
-    """
-    if config_editor is not None:
-        return config_editor
-    return os.environ.get("EDITOR") or None
+    interval: int
+    changes_path: Path
+
+    _instances: list[GerritInstance]
+    _editor: str | None = None
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._instances = []
+        self.load_config()
+
+    def mtime(self) -> float:
+        try:
+            return self.path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    def load_config(self):
+        with self.path.open("rb") as fh:
+            data = tomllib.load(fh)
+
+        if "config" not in data:
+            raise ValueError(f"Missing [config] section in {self.path}")
+
+        config_data = data["config"]
+
+        try:
+            self.interval = int((config_data.get("interval", DEFAULT_INTERVAL)))
+        except Exception as ex:
+            raise ValueError(f"Invalid interval value: {config_data.get('interval')}") from ex
+
+        if self.interval < 1:
+            raise ValueError(f"interval must be >= 1, got {self.interval}")
+
+        changes_file_filename = config_data.get("changes_file", DEFAULT_CHANGES_FILENAME)
+        self.changes_path = (self.path.parent / changes_file_filename).resolve()
+        if not self.changes_path.parent.exists():
+            raise ValueError(f"Directory for changes_file does not exist: {self.changes_path.parent}")
+
+        if not self.changes_path.parent.is_dir():
+            raise ValueError(f"Directory for changes_file is not a directory: {self.changes_path.parent}")
+
+        self._editor = config_data.get("editor")
+
+        self._instances = []
+
+        default_host = config_data.get("default_host")
+        default_port = config_data.get("default_port")
+        default_email = config_data.get("default_email")
+
+        if default_host and default_port:
+            self._instances.append(
+                GerritInstance(name="default", host=default_host, port=default_port, email=default_email)
+            )
+
+        for ins_name in data.get("instance", {}):
+            ins = data["instance"][ins_name]
+            host = ins.get("host") or default_host
+            port = ins.get("port") or default_port
+            email = ins.get("email") or default_email
+
+            if host and port:
+                self._instances.append(GerritInstance(name=ins_name, host=host, port=port, email=email))
+
+        if len(self._instances) == 0:
+            raise ValueError("No Gerrit instances configured. Please specify at least one instance in the config file.")
+
+        if len(set((ins.name for ins in self._instances))) != len(self._instances):
+            raise ValueError("Instance names must be unique.")
+
+    @property
+    def default_host(self) -> str:
+        return self.default_instance.host
+
+    @property
+    def default_port(self) -> int:
+        return self.default_instance.port
+
+    @property
+    def default_instance(self) -> GerritInstance:
+        if len(self._instances) == 0:
+            raise ValueError("No Gerrit instances configured")
+        return self._instances[0]
+
+    @property
+    def instances(self) -> list[GerritInstance]:
+        return self._instances
+
+    def get_instance_by_name(self, name: str) -> GerritInstance | None:
+        for ins in self._instances:
+            if ins.name == name:
+                return ins
+        return None
+
+    @property
+    def editor(self) -> str | None:
+        if self._editor is not None:
+            return self._editor
+        return os.environ.get("EDITOR") or None
+
+    def resolve_email(self, instance: GerritInstance) -> str | None:
+        if instance.email:
+            return instance.email
+
+        if self.default_instance.email:
+            return self.default_instance.email
+
+        return _get_email_from_git_config()
 
 
-def config_mtime(path: Path) -> float:
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
-
-
-def generate_example_toml(path: Path) -> None:
-    """Write an example approvals.toml. No-op if the file already exists."""
+def generate_example_config(path: Path) -> None:
     if path.exists():
         return
     content = (
-        "# Gerrit Approvals Dashboard — settings\n"
-        "[config]"
-        "# interval = 30\n"
-        '# default_host = "gerrit.example.com"\n'
-        "# default_port = 22\n"
+        "# Gerrit Changes Dashboard settings\n"
+        "[config]\n"
+        "interval = 30\n"
+        'changes_file = "./changes.json"  # path relative to this file\n'
+        'default_host = "gerrit.example.com"\n'
+        "default_port = 22\n"
         '# default_email = "you@example.com"  # falls back to git config user.email\n'
-        '# changes_file = "approvals.json"  # path relative to this file\n'
+        '# editor = "vim"  # falls back to env EDITOR\n'
+        "\n"
+        "# if you have multiple gerrit instances, you can specify them here.\n"
+        "# If default_host/default_port are set, they will be used as instance named 'default'\n"
+        "# Also, default_* values will be used as defaults for each instance.\n"
+        "# Instances must have different names.\n"
+        "\n"
+        "# If default values are not specified, first instance is used as default.\n"
+        "# [instance.default]\n"
+        '# host = "localhost"\n'
+        "# port = 29418\n"
+        '# email = ""\n'
     )
     path.write_text(content, encoding="utf-8")
-
-
-def generate_example_changes(path: Path) -> None:
-    """Write an example changes JSON file. No-op if the file already exists."""
-    if path.exists():
-        return
-
-    example = {
-        "$schema": "./approvals.schema.json",
-        "changes": [
-            {"host": "gerrit.example.com", "hash": "REPLACE_WITH_COMMIT_HASH"},
-            {"host": "gerrit.example.com", "hash": "ANOTHER_HASH", "waiting": True},
-        ],
-    }
-
-    path.write_text(json.dumps(example, indent=2) + "\n", encoding="utf-8")
-
-
-def update_config_field(path: Path, commit_hash: str, field: Literal["waiting", "disabled"], value: bool) -> float:
-    """Set field=value for the entry matching commit_hash. Returns new mtime.
-
-    Only 'waiting' and 'disabled' are persisted. 'deleted' is in-memory only.
-    """
-    data = json.loads(path.read_text())
-    for entry in data.get("changes", []):
-        if entry.get("hash") == commit_hash:
-            entry[field] = value
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    return config_mtime(path)
-
-
-def bulk_update_config_field(path: Path, updates: Mapping[str, tuple[Literal["waiting", "disabled"], bool]]) -> float:
-    """Apply multiple field updates in a single read/write. Returns new mtime.
-
-    :param updates: mapping of commit_hash -> (field, value)
-    """
-    data = json.loads(path.read_text())
-    for entry in data.get("changes", []):
-        h = entry.get("hash")
-        if h in updates:
-            field, value = updates[h]
-            entry[field] = value
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    return config_mtime(path)
-
-
-def add_change_to_config(path: Path, commit_hash: str, host: str) -> float:
-    """Append a new change entry to the config file. Returns new mtime."""
-    data = json.loads(path.read_text())
-    data.setdefault("changes", []).append({"hash": commit_hash, "host": host})
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    return config_mtime(path)
-
-
-def remove_changes_from_config(path: Path, hashes: set[str]) -> float:
-    """Remove entries matching hashes from config file. Returns new mtime."""
-    data = json.loads(path.read_text())
-    data["changes"] = [e for e in data.get("changes", []) if e.get("hash") not in hashes]
-    path.write_text(json.dumps(data, indent=2) + "\n")
-    return config_mtime(path)
-
-
-def update_config_comments(path: Path, commit_hash: str, comments: list[str]) -> float:
-    """Set comments array for the entry matching commit_hash. Returns new mtime.
-
-    Replaces the entire comments array atomically.
-    """
-    data = json.loads(path.read_text(encoding="utf-8"))
-    found = False
-    for entry in data.get("changes", []):
-        if entry.get("hash") == commit_hash:
-            entry["comments"] = comments
-            found = True
-            break
-    if not found:
-        raise ValueError(f"Change '{commit_hash}' not found in config")
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    return config_mtime(path)
