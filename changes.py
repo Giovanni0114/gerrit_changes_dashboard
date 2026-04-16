@@ -100,8 +100,6 @@ class Changes:
             except (ValueError, TypeError) as ex:
                 raise ValueError(f"Invalid number for change entry: {entry}") from ex
 
-            commit_hash = entry.get("hash")
-
             instance = entry.get("instance", "default")
 
             new_changes.append(
@@ -111,10 +109,7 @@ class Changes:
                     waiting=bool(entry.get("waiting", False)),
                     disabled=bool(entry.get("disabled", False)),
                     deleted=bool(entry.get("deleted", False)),
-                    submitted=bool(entry.get("submitted", False)),
                     comments=entry.get("comments", []),
-                    # TODO: remove this, shoud not be here
-                    current_revision=commit_hash,
                 )
             )
 
@@ -137,12 +132,6 @@ class Changes:
 
             if ch.deleted:
                 change["deleted"] = ch.deleted
-
-            if ch.submitted:
-                change["submitted"] = ch.submitted
-
-            if ch.current_revision:
-                change["hash"] = ch.current_revision
 
             if ch.comments:
                 change["comments"] = ch.comments
