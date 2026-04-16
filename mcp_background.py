@@ -7,10 +7,12 @@ from fastmcp.resources import FileResource
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 
+from logs import mcp_logger
 from models import AppContext
 from utils import authorized_tokens
 
 MCP_PATH = Path("./mcp")
+_log = mcp_logger()
 
 
 class AuthMiddleware(Middleware):
@@ -19,9 +21,11 @@ class AuthMiddleware(Middleware):
         auth = headers.get("authorization", "")
 
         if not auth.startswith("Bearer "):
+            _log.warning("auth rejected: missing or malformed bearer header")
             raise AuthorizationError("Missing or invalid Authorization header")
 
         if auth.removeprefix("Bearer ").strip() not in authorized_tokens():
+            _log.warning("auth rejected: unauthorized token")
             raise AuthorizationError("Unauthorized token")
 
         return await call_next(context)
@@ -39,6 +43,7 @@ class BackgroundMCPServer:
             target=self.mcp.run, daemon=True, args=["http", False], kwargs={"log_level": "CRITICAL"}
         )
         self.thread.start()
+        _log.info("mcp server started")
 
     def _register_tools(self):
         self.mcp.add_tool(self._quit)
@@ -57,10 +62,12 @@ class BackgroundMCPServer:
         )
 
     async def _quit(self):
+        _log.info("tool=quit")
         self.ctx.quit()
         return {"message": "Server closed"}
 
     async def _get_changes(self):
+        _log.info("tool=get_changes")
         payload = []
         for ch in self.ctx.get_changes():
             if ch.deleted or ch.disabled:

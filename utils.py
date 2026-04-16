@@ -1,29 +1,11 @@
-import datetime
 import os
 import select
 import sys
 import termios
-import threading
 import tty
 from enum import Enum
 from threading import Lock
 from typing import Self
-
-_log_lock = threading.Lock()
-_session_id = datetime.datetime.now().strftime("%H%M%S")
-
-
-def log(category: str, message: str, level: str = "INFO"):
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-
-    today = datetime.datetime.now().strftime("%Y%m%d")
-    filename = f"logs/{today}-{_session_id}.log"
-    timestamp = datetime.datetime.now().isoformat(timespec="seconds")
-    log_entry = f"[{timestamp}][{category}][{level}] {message}\n"
-    with _log_lock:
-        with open(filename, mode="a", encoding="utf-8") as f:
-            f.write(log_entry)
 
 
 class AtomicCounter:

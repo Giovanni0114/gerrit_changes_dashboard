@@ -10,6 +10,7 @@ from config import (
     AppConfig,
     generate_example_config,
 )
+from logs import app_logger, setup_logging
 from utils import NoEcho
 
 
@@ -51,6 +52,10 @@ def main() -> None:
         sys.exit(1)
 
     config = AppConfig(config_path)
+
+    log_path = setup_logging(config.log_path)
+    app_logger().info("startup config=%s logs=%s", config_path, log_path)
+
     changes = Changes(config.changes_path)
     changes.load_changes()
 

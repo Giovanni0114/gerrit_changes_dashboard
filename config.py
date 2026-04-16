@@ -8,6 +8,7 @@ from models import GerritInstance
 
 DEFAULT_INTERVAL = 30
 DEFAULT_CHANGES_FILENAME = "changes.json"
+DEFAULT_LOG_DIRNAME = "log"
 
 
 @lru_cache(maxsize=1)
@@ -32,6 +33,7 @@ class AppConfig:
 
     interval: int
     changes_path: Path
+    log_path: Path
 
     _instances: list[GerritInstance]
     _editor: str | None = None
@@ -71,6 +73,11 @@ class AppConfig:
 
         if not self.changes_path.parent.is_dir():
             raise ValueError(f"Directory for changes_file is not a directory: {self.changes_path.parent}")
+
+        log_dirname = config_data.get("log_dir", DEFAULT_LOG_DIRNAME)
+        self.log_path = (self.path.parent / log_dirname).resolve()
+        if self.log_path.exists() and not self.log_path.is_dir():
+            raise ValueError(f"log_dir exists but is not a directory: {self.log_path}")
 
         self._editor = config_data.get("editor")
 
@@ -148,6 +155,7 @@ def generate_example_config(path: Path) -> None:
         "[config]\n"
         "interval = 30\n"
         'changes_file = "./changes.json"  # path relative to this file\n'
+        'log_dir = "./log"  # path relative to this file; created if missing\n'
         'default_host = "gerrit.example.com"\n'
         "default_port = 22\n"
         '# default_email = "you@example.com"  # falls back to git config user.email\n'

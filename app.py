@@ -19,10 +19,12 @@ from config import (
 from display import build_header, build_layout, build_table
 from gerrit import is_submitted, query_approvals, query_open_changes
 from input_handler import InputHandler
+from logs import app_logger
 from models import ApprovalEntry, GerritInstance, TrackedChange
 from utils import Arrow, AtomicCounter, NoEcho
 
 _console = Console()
+_log = app_logger()
 
 EditorTarget = Literal["changes", "config"]
 
@@ -80,11 +82,17 @@ class App:
         self.config_mtime = self.config.mtime()
         self.changes_mtime = self.changes.mtime()
 
+        _log.info(
+            "app init config=%s changes=%s instances=%d tracked=%d",
+            self.config.path, self.changes.path, len(self.config.instances), self.changes.count(),
+        )
+
     # --- Query methods ---
 
     def _query(self, ch: TrackedChange) -> tuple[TrackedChange | None, dict]:
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
+            _log.warning("query skipped: unknown instance %r for change %s", ch.instance, ch.number)
             return None, {}
 
         return ch, query_approvals(str(ch.number), instance.host, instance.port)
@@ -131,8 +139,10 @@ class App:
 
         if "error" in result:
             self.status_msg = f"[red]Automerge failed for change #{row}: {result['error']}[/red]"
+            _log.warning("automerge failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
         else:
             self.status_msg = f"[green]Automerge +1 set for change #{row}[/green]"
+            _log.info("automerge set change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
     # --- Config methods ---
@@ -152,11 +162,13 @@ class App:
             self.changes_mtime = new_changes_mtime
 
             self.status_msg = "[green]Config reloaded[/green]"
+            _log.info("config reloaded instances=%d tracked=%d", len(self.config.instances), self.changes.count())
             return True
         except Exception as exc:
             self.status_msg = f"[red]Config error: {exc}[/red]"
             self.config_mtime = new_toml_mtime
             self.changes_mtime = new_changes_mtime
+            _log.error("config reload failed: %s", exc)
             return False
 
     # --- Editor methods ---
@@ -338,6 +350,7 @@ class App:
         self.changes.append(new_change)
         self.status_msg = f"[green]Added {number} @ {instance}[/green]"
         self.changes_mtime = self.changes.save_changes()
+        _log.info("change added number=%d instance=%s", number, instance)
 
     def delete_all_submitted(self) -> None:
         count = 0
@@ -415,18 +428,20 @@ class App:
         for instance in self.config.instances:
             added += self._fetch_open_changes_from_instance(instance)
 
+        _log.info("fetch_open_changes added=%d instances=%d", added, len(self.config.instances))
+
         if added:
             self.status_msg = f"[green]Added {added} change(s)[/green]"
             self.changes_mtime = self.changes.save_changes()
             self._start_refresh()
         else:
             self.status_msg = f"[dim] No new changes on {len(self.config.instances)} instances[/dim]"
-            pass
 
     def quit(self) -> None:
         self.changes.remove_all_deleted()
         self.changes_mtime = self.changes.save_changes()
         self.exit_msg = f"{len(self.changes.get_all())} change(s) saved. Bye!"
+        _log.info("app quit tracked=%d", self.changes.count())
         self.running = False
 
     # --- Comments ---
