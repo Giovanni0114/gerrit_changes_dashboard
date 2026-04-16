@@ -5,3 +5,4 @@ spec
 .authorized_tokens
 config.toml
 log/
+pm
