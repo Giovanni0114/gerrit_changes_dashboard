@@ -12,6 +12,7 @@ from rich.console import Console, Group
 from rich.live import Live
 
 import gerrit
+from cache import CacheEntry, SshCache
 from changes import Changes
 from config import (
     AppConfig,
@@ -29,7 +30,7 @@ _log = app_logger()
 EditorTarget = Literal["changes", "config"]
 
 
-def _store_result(ch: TrackedChange | None, data: dict) -> None:
+def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None:
     if ch is None:
         return
 
@@ -59,11 +60,14 @@ def _store_result(ch: TrackedChange | None, data: dict) -> None:
     ch._snapshot = new_snapshot
     ch.submitted = is_submitted(data)
 
+    cache.cache(ch)
+
 
 class App:
-    def __init__(self, config: AppConfig, changes: Changes) -> None:
+    def __init__(self, config: AppConfig) -> None:
         self.config = config
-        self.changes = changes
+        self.changes = Changes(self.config.changes_path)
+        self.cache = SshCache(self.config.cache_path)
 
         self.status_msg: str = ""
         self.exit_msg: str = ""
@@ -82,10 +86,23 @@ class App:
         self.config_mtime = self.config.mtime()
         self.changes_mtime = self.changes.mtime()
 
+        self._sync_cache_with_changes()
+
         _log.info(
-            "app init config=%s changes=%s instances=%d tracked=%d",
-            self.config.path, self.changes.path, len(self.config.instances), self.changes.count(),
+            "app init config=%s changes=%s cache=%s instances=%d tracked=%d",
+            self.config.path,
+            self.changes.path,
+            self.config.cache_path,
+            len(self.config.instances),
+            self.changes.count(),
         )
+
+    def _sync_cache_with_changes(self) -> None:
+        """Evict orphaned cache entries and hydrate tracked changes from cache."""
+        tracked = self.changes.get_all()
+        self.cache.evict({(ch.number, ch.instance) for ch in tracked})
+        for ch in tracked:
+            self.cache.hydrate(ch)
 
     # --- Query methods ---
 
@@ -103,17 +120,17 @@ class App:
 
         with ThreadPoolExecutor(max_workers=len(changes) or 1) as pool:
             for ch, data in pool.map(self._query, changes):
-                _store_result(ch, data)
+                _store_result(ch, data, self.cache)
 
+        self.cache.save_file()
         self.changes_mtime = self.changes.save_changes()
 
     def query_active_changes(self) -> None:
         self._do_query(self.changes.get_running())
 
     def query_disabled_once(self) -> None:
-        # TODO: when the real caching system is implemented,
-        # we should limit the querying to disabled changes without data
-        self._do_query(self.changes.get_disabled())
+        uncached = [ch for ch in self.changes.get_disabled() if not self.cache.has(ch)]
+        self._do_query(uncached)
 
     def set_automerge(self, row: int) -> None:
         ch = self.changes.at(row - 1)
@@ -160,6 +177,8 @@ class App:
 
             self.changes.load_changes()
             self.changes_mtime = new_changes_mtime
+
+            self._sync_cache_with_changes()
 
             self.status_msg = "[green]Config reloaded[/green]"
             _log.info("config reloaded instances=%d tracked=%d", len(self.config.instances), self.changes.count())
@@ -415,7 +434,7 @@ class App:
                 continue
 
             ch = TrackedChange(number=number, instance=instance.name)
-            _store_result(ch, change_data)
+            _store_result(ch, change_data, self.cache)
             self.changes.append(ch)
             numbers_in_changes.add(number)
             added += 1

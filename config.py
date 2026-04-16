@@ -8,6 +8,7 @@ from models import GerritInstance
 
 DEFAULT_INTERVAL = 30
 DEFAULT_CHANGES_FILENAME = "changes.json"
+DEFAULT_CACHE_FILENAME = "cache.json"
 DEFAULT_LOG_DIRNAME = "log"
 
 
@@ -33,6 +34,7 @@ class AppConfig:
 
     interval: int
     changes_path: Path
+    cache_path: Path
     log_path: Path
 
     _instances: list[GerritInstance]
@@ -73,6 +75,14 @@ class AppConfig:
 
         if not self.changes_path.parent.is_dir():
             raise ValueError(f"Directory for changes_file is not a directory: {self.changes_path.parent}")
+
+        cache_file_filename = config_data.get("cache_file", DEFAULT_CACHE_FILENAME)
+        self.cache_path = (self.path.parent / cache_file_filename).resolve()
+        if not self.cache_path.parent.exists():
+            raise ValueError(f"Directory for cache_file does not exist: {self.cache_path.parent}")
+
+        if not self.cache_path.parent.is_dir():
+            raise ValueError(f"Directory for cache_file is not a directory: {self.cache_path.parent}")
 
         log_dirname = config_data.get("log_dir", DEFAULT_LOG_DIRNAME)
         self.log_path = (self.path.parent / log_dirname).resolve()
@@ -155,6 +165,7 @@ def generate_example_config(path: Path) -> None:
         "[config]\n"
         "interval = 30\n"
         'changes_file = "./changes.json"  # path relative to this file\n'
+        '# cache_file = "./cache.json"  # SSH data cache, path relative to this file\n'
         'log_dir = "./log"  # path relative to this file; created if missing\n'
         'default_host = "gerrit.example.com"\n'
         "default_port = 22\n"

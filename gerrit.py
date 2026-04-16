@@ -32,20 +32,28 @@ def query_set_automerge(revision: str, host: str, port: int | None = None) -> di
             stderr = result.stderr.strip()
             _log.warning(
                 "action=set_automerge endpoint=%s revision=%s duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint, revision, duration, result.returncode, stderr,
+                endpoint,
+                revision,
+                duration,
+                result.returncode,
+                stderr,
             )
             msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
             return {"error": msg}
         _log.info(
             "action=set_automerge endpoint=%s revision=%s duration=%.3fs status=ok",
-            endpoint, revision, duration,
+            endpoint,
+            revision,
+            duration,
         )
         return {"success": True}
     except subprocess.TimeoutExpired:
         duration = time.monotonic() - start
         _log.warning(
             "action=set_automerge endpoint=%s revision=%s duration=%.3fs status=timeout",
-            endpoint, revision, duration,
+            endpoint,
+            revision,
+            duration,
         )
         return {"error": "SSH timeout"}
 
@@ -69,7 +77,10 @@ def query_approvals(query_id: str, host: str, port: int | None = None) -> dict:
             stderr = result.stderr.strip()
             _log.warning(
                 "action=query_approvals endpoint=%s id=%s duration=%.3fs status=empty stderr=%r",
-                endpoint, query_id, duration, stderr,
+                endpoint,
+                query_id,
+                duration,
+                stderr,
             )
             msg = f"No output from Gerrit ({stderr})" if stderr else "No output from Gerrit"
             return {"error": msg}
@@ -77,26 +88,35 @@ def query_approvals(query_id: str, host: str, port: int | None = None) -> dict:
         if "type" in data and data["type"] == "stats":
             _log.info(
                 "action=query_approvals endpoint=%s id=%s duration=%.3fs status=not_found",
-                endpoint, query_id, duration,
+                endpoint,
+                query_id,
+                duration,
             )
             return {"error": "Change not found"}
         _log.info(
             "action=query_approvals endpoint=%s id=%s duration=%.3fs status=ok",
-            endpoint, query_id, duration,
+            endpoint,
+            query_id,
+            duration,
         )
         return data
     except subprocess.TimeoutExpired:
         duration = time.monotonic() - start
         _log.warning(
             "action=query_approvals endpoint=%s id=%s duration=%.3fs status=timeout",
-            endpoint, query_id, duration,
+            endpoint,
+            query_id,
+            duration,
         )
         return {"error": "SSH timeout"}
     except (json.JSONDecodeError, IndexError) as exc:
         duration = time.monotonic() - start
         _log.error(
             "action=query_approvals endpoint=%s id=%s duration=%.3fs status=parse_error error=%r",
-            endpoint, query_id, duration, str(exc),
+            endpoint,
+            query_id,
+            duration,
+            str(exc),
         )
         return {"error": str(exc)}
 
@@ -132,7 +152,10 @@ def query_open_changes(email: str, host: str, port: int | None = None) -> list[d
         if result.returncode != 0:
             _log.warning(
                 "action=query_open_changes endpoint=%s owner=%s duration=%.3fs status=failed rc=%d",
-                endpoint, email, duration, result.returncode,
+                endpoint,
+                email,
+                duration,
+                result.returncode,
             )
             return []
         changes: list[dict] = []
@@ -148,13 +171,18 @@ def query_open_changes(email: str, host: str, port: int | None = None) -> list[d
             changes.append(obj)
         _log.info(
             "action=query_open_changes endpoint=%s owner=%s duration=%.3fs status=ok count=%d",
-            endpoint, email, duration, len(changes),
+            endpoint,
+            email,
+            duration,
+            len(changes),
         )
         return changes
     except subprocess.TimeoutExpired:
         duration = time.monotonic() - start
         _log.warning(
             "action=query_open_changes endpoint=%s owner=%s duration=%.3fs status=timeout",
-            endpoint, email, duration,
+            endpoint,
+            email,
+            duration,
         )
         return []

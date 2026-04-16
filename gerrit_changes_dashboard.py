@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from app import App
+from cache import SshCache
 from changes import Changes
 from config import (
     AppConfig,
@@ -32,6 +33,12 @@ def main() -> None:
         help="Generate example config.toml, then exit",
     )
 
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Delete the SSH data cache file before starting",
+    )
+
     args = parser.parse_args()
     config_path = Path(args.config)
 
@@ -47,13 +54,14 @@ def main() -> None:
 
     config = AppConfig(config_path)
 
+    if args.clear_cache:
+        config.cache_path.unlink(missing_ok=True)
+        print(f"Cleared cache: {config.cache_path}")
+
     log_path = setup_logging(config.log_path)
     app_logger().info("startup config=%s logs=%s", config_path, log_path)
 
-    changes = Changes(config.changes_path)
-    changes.load_changes()
-
-    app = App(config, changes)
+    app = App(config)
     app.run()
 
 
