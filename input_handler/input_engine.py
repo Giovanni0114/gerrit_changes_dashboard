@@ -1,12 +1,29 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable, Iterable
 
 from models import AppContext
 from utils import Arrow
 
-Context = dict[str, str]
+from .context_actions import (
+    add_change,
+    comment_add,
+    comment_delete,
+    comment_edit_last,
+    comment_replace_all,
+    fetch_my_changes,
+    handle_deletion,
+    open_change,
+    open_changes_in_editor,
+    open_config_in_editor,
+    quit_app,
+    refresh,
+    set_automerge,
+    toggle_disable,
+    toggle_waiting,
+)
+from .utils import Context, InputField, instances_hint
 
-PROMPTS_FOR_LAST_KEY = {
+PROMPT_PER_LAST_KEY = {
     "a": "Add change (number)",
     "w": "Toggle waiting",
     "d": "Toggle disabled",
@@ -15,251 +32,15 @@ PROMPTS_FOR_LAST_KEY = {
     "s": "Set Automerge +1",
     "e": "Editor",
     "c": "Comment",
+    "r": "Review",
 }
 
-# --------------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class InputField:
-    name: str
-    special_chars: frozenset[str] = field(default_factory=frozenset)
-    digits_only: bool = False
-    extra_chars: frozenset[str] = field(default_factory=frozenset)
-    special_hint_func: Callable[[AppContext], str] | None = None
-
-
-# --------------------------------------------------------------------------------
-
-
-def validator_int(input: str) -> bool:
-    return input.isnumeric()
-
-
-def parse_idx_notation(raw: str, max_idx: int) -> list[int] | None:
-    """Parse advanced index notation into a sorted list of unique 1-based indexes.
-
-    Supported formats:
-    - Single index: ``"3"``
-    - Comma-separated: ``"3,2,4"``
-    - Range: ``"3-8"`` (inclusive on both ends)
-    - Combined: ``"1-2, 3-5, 11, 23"``
-
-    Whitespace is ignored. Returns ``None`` when the expression is invalid or any
-    index falls outside ``[1, max_idx]``.
-    """
-    if not raw or not raw.strip():
-        return None
-
-    stripped = raw.replace(" ", "")
-    if not stripped:
-        return None
-
-    result: set[int] = set()
-    for part in stripped.split(","):
-        if not part:
-            return None  # empty segment, e.g. "1,,3"
-        if "-" in part:
-            pieces = part.split("-")
-            if len(pieces) != 2 or not pieces[0] or not pieces[1]:
-                return None
-            if not pieces[0].isnumeric() or not pieces[1].isnumeric():
-                return None
-            lo, hi = int(pieces[0]), int(pieces[1])
-            if lo > hi:
-                return None
-            if lo < 1 or hi > max_idx:
-                return None
-            result.update(range(lo, hi + 1))
-        else:
-            if not part.isnumeric():
-                return None
-            val = int(part)
-            if val < 1 or val > max_idx:
-                return None
-            result.add(val)
-
-    return sorted(result) if result else None
-
-
-def validate_idx(raw: str, num_changes: int) -> int | None:
-    """Validate a single raw index string against the current changes count.
-
-    Returns the 1-based index as ``int`` on success, ``None`` on failure.
-    Rejects non-numeric input, zero, negative values, and out-of-range indexes.
-    """
-    if not raw.isnumeric():
-        return None
-    val = int(raw)
-    if val < 1 or val > num_changes:
-        return None
-    return val
-
-
-# --------------------------------------------------------------------------------
-
-
-def refresh(app_ctx: AppContext, ctx: Context) -> None:
-    app_ctx.refresh_all()
-
-
-def quit_app(app_ctx: AppContext, ctx: Context) -> None:
-    app_ctx.quit()
-
-
-# --------------------------------------------------------------------------------
-
-
-def add_change(app_ctx: AppContext, ctx: Context) -> None:
-    raw_number = ctx["number"]
-    raw_instance = ctx["instance"]
-
-    if not raw_number.isdigit() or int(raw_number) == 0:
-        app_ctx.status_msg = f'[red]Invalid change number: "{raw_number}"[/red]'
-        return
-
-    number = int(raw_number)
-
-    if raw_instance == "":
-        instance = app_ctx.config.default_instance.name
-    elif raw_instance.isdigit():
-        idx = int(raw_instance)
-        if idx < 1 or idx > len(app_ctx.config.instances):
-            app_ctx.status_msg = f"[red]No instance at index {idx}[/red]"
-            return
-        instance = app_ctx.config.instances[idx - 1].name
-    else:
-        instance = raw_instance
-
-    if not instance:
-        app_ctx.status_msg = "[red]No instance specified[/red]"
-        return
-
-    app_ctx.add_change(number, instance)
-
-
-def toggle_waiting(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    if idx == "a":
-        app_ctx.toggle_all_waiting()
-        return
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.toggle_waiting(i)
-
-
-def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    if idx == "a":
-        app_ctx.delete_all_submitted()
-        return
-
-    if idx == "x":
-        app_ctx.purge_deleted()
-        return
-
-    if idx == "r":
-        app_ctx.restore_all()
-        return
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.toggle_deleted(i)
-
-
-def toggle_disable(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    if idx == "a":
-        app_ctx.toggle_all_disabled()
-        return
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.toggle_disabled(i)
-
-
-def open_change(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.open_change_webui(i)
-
-
-def set_automerge(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.set_automerge(i)
-
-
-def open_config_in_editor(app_ctx: AppContext, ctx: Context) -> None:
-    """Open the TOML config file in the configured editor."""
-    app_ctx.open_config_in_editor()
-
-
-def open_changes_in_editor(app_ctx: AppContext, ctx: Context) -> None:
-    """Open the approvals/changes file in the configured editor."""
-    app_ctx.open_changes_in_editor()
-
-
-def fetch_my_changes(app_ctx: AppContext, ctx: Context) -> None:
-    """Fetch all open changes owned by the user from Gerrit."""
-    app_ctx.fetch_open_changes()
-
-
-def comment_add(app_ctx: AppContext, ctx: Context) -> None:
-    """Add a comment to a change."""
-    app_ctx.add_comment(int(ctx["idx"]), ctx["text"])
-
-
-def comment_replace_all(app_ctx: AppContext, ctx: Context) -> None:
-    """Replace all comments with a single new comment."""
-    app_ctx.replace_all_comments(int(ctx["idx"]), ctx["text"])
-
-
-def comment_edit_last(app_ctx: AppContext, ctx: Context) -> None:
-    """Edit the last comment on a change."""
-    app_ctx.edit_last_comment(int(ctx["idx"]), ctx["text"])
-
-
-def comment_delete(app_ctx: AppContext, ctx: Context) -> None:
-    """Delete a comment or all comments."""
-    cidx = ctx["comment_idx"]
-    row = int(ctx["idx"])
-    if cidx == "a":
-        app_ctx.delete_all_comments(row)
-    else:
-        app_ctx.delete_comment(row, int(cidx))
-
-
-# --------------------------------------------------------------------------------
+SUB_ACTIONS_LABELS = {
+    "a": "a=add",
+    "A": "A=replace all",
+    "e": "e=edit last",
+    "d": "d=delete",
+}
 
 
 @dataclass(frozen=True)
@@ -278,6 +59,7 @@ class LeafAction:
 class MenuAction:
     required_inputs: list[InputField]
     sub_actions: dict[str, SubAction]
+    label: str
 
 
 Action = LeafAction | MenuAction
@@ -294,6 +76,7 @@ _IDX_EXTRA = frozenset({",", "-", " "})
 IDX_FIELD = InputField("idx", digits_only=True)
 TEXT_FIELD = InputField("text")
 COMMENT_IDX_FIELD = InputField("comment_idx", frozenset({"a"}), digits_only=True)
+CONFIRM_FIELD = InputField("confirm", frozenset({"y", "n"}))
 
 # --- Comment sub-actions ---
 COMMENT_SUBACTIONS: dict[str, SubAction] = {
@@ -303,16 +86,13 @@ COMMENT_SUBACTIONS: dict[str, SubAction] = {
     "d": SubAction(comment_delete, [COMMENT_IDX_FIELD]),
 }
 
-
-def _instances_hint(app_ctx: AppContext) -> str:
-    if not app_ctx.config.instances:
-        return "No instances configured"
-    return "Instances: " + ", ".join(f"{idx + 1}={inst.name}" for idx, inst in enumerate(app_ctx.config.instances))
+# --- Review sub-actions (populated by EPIC001-002...007) ---
+REVIEW_SUBACTIONS: dict[str, SubAction] = {}
 
 
 LEADER_ACTIONS: dict[str, Action | None] = {
     "a": LeafAction(
-        add_change, [InputField("number", digits_only=True), InputField("instance", special_hint_func=_instances_hint)]
+        add_change, [InputField("number", digits_only=True), InputField("instance", special_hint_func=instances_hint)]
     ),
     "w": LeafAction(toggle_waiting, [InputField("idx", frozenset({"a"}), digits_only=True, extra_chars=_IDX_EXTRA)]),
     "d": LeafAction(toggle_disable, [InputField("idx", frozenset({"a"}), digits_only=True, extra_chars=_IDX_EXTRA)]),
@@ -322,7 +102,8 @@ LEADER_ACTIONS: dict[str, Action | None] = {
     ),
     "o": LeafAction(open_change, [InputField("idx", digits_only=True, extra_chars=_IDX_EXTRA)]),
     "s": LeafAction(set_automerge, [InputField("idx", digits_only=True, extra_chars=_IDX_EXTRA)]),
-    "c": MenuAction([IDX_FIELD], COMMENT_SUBACTIONS),
+    "c": MenuAction([IDX_FIELD], COMMENT_SUBACTIONS, "comment"),
+    "r": MenuAction([IDX_FIELD], REVIEW_SUBACTIONS, "review"),
     "e": None,  # submenu — resolved in match_action via full sequence
 }
 
@@ -351,11 +132,13 @@ def match_action(sequence: list[str]) -> Action | None:
     if not sequence:
         return None
 
-    last = sequence[-1]
-
     match sequence:
         case ["e", key]:
             return EDITOR_ACTIONS.get(key, None)
+        case [" ", key]:
+            return LEADER_ACTIONS.get(key, None)
+
+    last = sequence[-1]
 
     match last:
         case "r":
@@ -381,6 +164,7 @@ class InputHandler:
         self.current_field: InputField | None = None
         self.context: dict[str, str] = {}
         self.pending_sub_actions: dict[str, SubAction] | None = None
+        self.pending_menu: MenuAction | None = None
         self.current_action: LeafAction | None = None
 
     def hints(self) -> str:
@@ -395,7 +179,8 @@ class InputHandler:
                 "[bold]x[/] delete  "
                 "[bold]o[/] open  "
                 "[bold]s[/] automerge  "
-                "[bold]c[/] comment"
+                "[bold]c[/] comment  "
+                "[bold]r[/] review"
             )
 
         return "[bold]Space[/] Changes  [bold]q[/] quit  [bold]r[/] refresh  [bold]f[/] fetch  [bold]e[/] editor  "
@@ -404,23 +189,20 @@ class InputHandler:
         if len(self.sequence) == 0:
             return ""
 
-        # Show sub-action options if in sub-action selection mode
         if self.pending_sub_actions is not None:
             options = []
             for key in sorted(self.pending_sub_actions.keys()):
-                if key == "a":
-                    options.append("a=add")
-                elif key == "A":
-                    options.append("A=replace all")
-                elif key == "e":
-                    options.append("e=edit last")
-                elif key == "d":
-                    options.append("d=delete")
-            return f"comment > {' / '.join(options)} [ESC=cancel]"
+                if label := SUB_ACTIONS_LABELS.get(key, None):
+                    options.append(label)
+
+            label = self.pending_menu.label if self.pending_menu else ""
+
+            return f"{label} > {' / '.join(options)} [ESC=cancel]"
 
         if self.input is not None and self.current_field is not None:
-            hint = PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
+            hint = PROMPT_PER_LAST_KEY.get(self.sequence[-1], "")
             special_hint = ""
+
             if special := self.current_field.special_chars:
                 special_hint = f" [{' / '.join(sorted(special))}]"
 
@@ -431,7 +213,7 @@ class InputHandler:
             hint += f": {self.current_field.name}: {self.input}_{special_hint} [ESC=cancel]"
             return hint
 
-        return PROMPTS_FOR_LAST_KEY.get(self.sequence[-1], "")
+        return PROMPT_PER_LAST_KEY.get(self.sequence[-1], "")
 
     def handle_key(self, key: str | Arrow) -> None:
         if isinstance(key, Arrow):
@@ -510,6 +292,7 @@ class InputHandler:
             self.reset()
         elif isinstance(action, MenuAction):
             self.pending_sub_actions = action.sub_actions
+            self.pending_menu = action
             self.current_action = None
 
     def _start_field_collection(self) -> None:
@@ -538,6 +321,7 @@ class InputHandler:
         self.sequence = []
         self.context = {}
         self.pending_sub_actions = None
+        self.pending_menu = None
         self.current_action = None
 
     def _handle_input(self, key: str) -> bool:

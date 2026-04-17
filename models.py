@@ -36,6 +36,7 @@ class TrackedChange:
     waiting: bool = False
 
     # --- data from gerrit ---
+    # TODO: DELETE THIS, should not have duplicated data
     subject: str | None = None
     project: str | None = None
     url: str | None = None
