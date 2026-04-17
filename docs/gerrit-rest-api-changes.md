@@ -1,0 +1,5184 @@
+    Gerrit Code Review - /changes/ REST API
+
+# Gerrit Code Review - /changes/ REST API
+
+This page describes the change related REST endpoints. Please also take note of the general information on the [REST API](rest-api.html).
+
+## Change Endpoints
+
+### Create Change
+
+'POST /changes/'
+
+The change input [ChangeInput](#change-input) entity must be provided in the request body.
+
+Request
+
+  POST /changes/ HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "project" : "myProject",
+    "subject" : "Let's support 100% Gerrit workflow direct in browser",
+    "branch" : "master",
+    "topic" : "create-change-in-browser",
+    "status" : "DRAFT"
+  }
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the resulting change.
+
+Response
+
+  HTTP/1.1 201 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9941",
+    "project": "myProject",
+    "branch": "master",
+    "topic": "create-change-in-browser",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9941",
+    "subject": "Let's support 100% Gerrit workflow direct in browser",
+    "status": "DRAFT",
+    "created": "2014-05-05 07:15:44.639000000",
+    "updated": "2014-05-05 07:15:44.639000000",
+    "mergeable": true,
+    "insertions": 0,
+    "deletions": 0,
+    "\_number": 4711,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+### Query Changes
+
+'GET /changes/'
+
+Queries changes visible to the caller. The [query string](user-search.html#_search_operators) must be provided by the `q` parameter. The `n` parameter can be used to limit the returned results.
+
+As result a list of [ChangeInfo](#change-info) entries is returned. The change output is sorted by the last update time, most recently updated to oldest updated.
+
+Query for open changes of watched projects:
+
+Request
+
+  GET /changes/?q=status:open+is:watched&n=2 HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "id": "demo~master~Idaf5e098d70898b7119f6f4af5a6c13343d64b57",
+      "project": "demo",
+      "branch": "master",
+      "change\_id": "Idaf5e098d70898b7119f6f4af5a6c13343d64b57",
+      "subject": "One change",
+      "status": "NEW",
+      "created": "2012-07-17 07:18:30.854000000",
+      "updated": "2012-07-17 07:19:27.766000000",
+      "mergeable": true,
+      "insertions": 26,
+      "deletions": 10,
+      "\_number": 1756,
+      "owner": {
+        "name": "John Doe"
+      },
+    },
+    {
+      "id": "demo~master~I09c8041b5867d5b33170316e2abc34b79bbb8501",
+      "project": "demo",
+      "branch": "master",
+      "change\_id": "I09c8041b5867d5b33170316e2abc34b79bbb8501",
+      "subject": "Another change",
+      "status": "NEW",
+      "created": "2012-07-17 07:18:30.884000000",
+      "updated": "2012-07-17 07:18:30.885000000",
+      "mergeable": true,
+      "insertions": 12,
+      "deletions": 18,
+      "\_number": 1757,
+      "owner": {
+        "name": "John Doe"
+      },
+      "\_more\_changes": true
+    }
+  \]
+
+If the number of changes matching the query exceeds either the internal limit or a supplied `n` query parameter, the last change object has a `_more_changes: true` JSON field set.
+
+The `S` or `start` query parameter can be supplied to skip a number of changes from the list.
+
+Clients are allowed to specify more than one query by setting the `q` parameter multiple times. In this case the result is an array of arrays, one per query in the same order the queries were given in.
+
+Query for the 25 most recent open changes of the projects that you watch
+
+GET /changes/?q=status:open+is:watched&n=25 HTTP/1.0
+
+Query that retrieves changes for a user’s dashboard:
+
+Request
+
+  GET /changes/?q=is:open+owner:self&q=is:open+reviewer:self+-owner:self&q=is:closed+owner:self+limit:5&o=LABELS HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    \[
+      {
+        "id": "demo~master~Idaf5e098d70898b7119f6f4af5a6c13343d64b57",
+        "project": "demo",
+        "branch": "master",
+        "change\_id": "Idaf5e098d70898b7119f6f4af5a6c13343d64b57",
+        "subject": "One change",
+        "status": "NEW",
+        "created": "2012-07-17 07:18:30.854000000",
+        "updated": "2012-07-17 07:19:27.766000000",
+        "mergeable": true,
+        "insertions": 4,
+        "deletions": 7,
+        "\_number": 1756,
+        "owner": {
+          "name": "John Doe"
+        },
+        "labels": {
+          "Verified": {},
+          "Code-Review": {}
+        }
+      }
+    \],
+    \[\],
+    \[\]
+  \]
+
+Query the changes for your user dashboard
+
+GET /changes/?q=is:open+owner:self&q=is:open+reviewer:self+-owner:self&q=is:closed+owner:self+limit:5&o=LABELS HTTP/1.0
+
+Additional fields can be obtained by adding `o` parameters, each option requires more database lookups and slows down the query response time to the client so they are generally disabled by default. Optional fields are:
+
+*   `LABELS`: a summary of each label required for submit, and approvers that have granted (or rejected) with that label.
+
+
+*   `DETAILED_LABELS`: detailed label information, including numeric values of all existing approvals, recognized label values, values permitted to be set by the current user, all reviewers by state, and reviewers that may be removed by the current user.
+
+
+*   `CURRENT_REVISION`: describe the current revision (patch set) of the change, including the commit SHA-1 and URLs to fetch from.
+
+
+*   `ALL_REVISIONS`: describe all revisions, not just current.
+
+
+*   `DOWNLOAD_COMMANDS`: include the `commands` field in the [FetchInfo](#fetch-info) for revisions. Only valid when the `CURRENT_REVISION` or `ALL_REVISIONS` option is selected.
+
+
+*   `CURRENT_COMMIT`: parse and output all header fields from the commit object, including message. Only valid when the `CURRENT_REVISION` or `ALL_REVISIONS` option is selected.
+
+
+*   `ALL_COMMITS`: parse and output all header fields from the output revisions. If only `CURRENT_REVISION` was requested then only the current revision’s commit data will be output.
+
+
+*   `CURRENT_FILES`: list files modified by the commit and magic files, including basic line counts inserted/deleted per file. Only valid when the `CURRENT_REVISION` or `ALL_REVISIONS` option is selected.
+
+
+*   `ALL_FILES`: list files modified by the commit and magic files, including basic line counts inserted/deleted per file. If only the `CURRENT_REVISION` was requested then only that commit’s modified files will be output.
+
+
+*   `DETAILED_ACCOUNTS`: include `_account_id`, `email` and `username` fields when referencing accounts.
+
+
+*   `REVIEWER_UPDATES`: include updates to reviewers set as [ReviewerUpdateInfo](#review-update-info) entities.
+
+
+*   `MESSAGES`: include messages associated with the change.
+
+
+*   `CURRENT_ACTIONS`: include information on available actions for the change and its current revision. Ignored if the caller is not authenticated.
+
+
+*   `CHANGE_ACTIONS`: include information on available change actions for the change. Ignored if the caller is not authenticated.
+
+
+*   `REVIEWED`: include the `reviewed` field if all of the following are true:
+
+    *   the change is open
+
+    *   the caller is authenticated
+
+    *   the caller has commented on the change more recently than the last update from the change owner, i.e. this change would show up in the results of [reviewedby:self](user-search.html#reviewedby).
+
+
+
+*   `SUBMITTABLE`: include the `submittable` field in [ChangeInfo](#change-info), which can be used to tell if the change is reviewed and ready for submit.
+
+
+*   `WEB_LINKS`: include the `web_links` field in [CommitInfo](#commit-info), therefore only valid in combination with `CURRENT_COMMIT` or `ALL_COMMITS`.
+
+
+*   `CHECK`: include potential problems with the change.
+
+
+*   `COMMIT_FOOTERS`: include the full commit message with Gerrit-specific commit footers in the [RevisionInfo](#revision-info).
+
+
+*   `PUSH_CERTIFICATES`: include push certificate information in the [RevisionInfo](#revision-info). Ignored if signed push is not [enabled](config-gerrit.html#receive.enableSignedPush) on the server.
+
+
+Request
+
+  GET /changes/?q=97&o=CURRENT\_REVISION&o=CURRENT\_COMMIT&o=CURRENT\_FILES&o=DOWNLOAD\_COMMANDS HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "id": "gerrit~master~I7ea46d2e2ee5c64c0d807677859cfb7d90b8966a",
+      "project": "gerrit",
+      "branch": "master",
+      "change\_id": "I7ea46d2e2ee5c64c0d807677859cfb7d90b8966a",
+      "subject": "Use an EventBus to manage star icons",
+      "status": "NEW",
+      "created": "2012-04-25 00:52:25.580000000",
+      "updated": "2012-04-25 00:52:25.586000000",
+      "mergeable": true,
+      "insertions": 16,
+      "deletions": 7,
+      "\_number": 97,
+      "owner": {
+        "name": "Shawn Pearce"
+      },
+      "current\_revision": "184ebe53805e102605d11f6b143486d15c23a09c",
+      "revisions": {
+        "184ebe53805e102605d11f6b143486d15c23a09c": {
+          "kind": "REWORK",
+          "\_number": 1,
+          "ref": "refs/changes/97/97/1",
+          "fetch": {
+            "git": {
+              "url": "git://localhost/gerrit",
+              "ref": "refs/changes/97/97/1",
+              "commands": {
+                "Checkout": "git fetch git://localhost/gerrit refs/changes/97/97/1 \\u0026\\u0026 git checkout FETCH\_HEAD",
+                "Cherry-Pick": "git fetch git://localhost/gerrit refs/changes/97/97/1 \\u0026\\u0026 git cherry-pick FETCH\_HEAD",
+                "Format-Patch": "git fetch git://localhost/gerrit refs/changes/97/97/1 \\u0026\\u0026 git format-patch -1 --stdout FETCH\_HEAD",
+                "Pull": "git pull git://localhost/gerrit refs/changes/97/97/1"
+              }
+            },
+            "http": {
+              "url": "http://myuser@127.0.0.1:8080/gerrit",
+              "ref": "refs/changes/97/97/1",
+              "commands": {
+                "Checkout": "git fetch http://myuser@127.0.0.1:8080/gerrit refs/changes/97/97/1 \\u0026\\u0026 git checkout FETCH\_HEAD",
+                "Cherry-Pick": "git fetch http://myuser@127.0.0.1:8080/gerrit refs/changes/97/97/1 \\u0026\\u0026 git cherry-pick FETCH\_HEAD",
+                "Format-Patch": "git fetch http://myuser@127.0.0.1:8080/gerrit refs/changes/97/97/1 \\u0026\\u0026 git format-patch -1 --stdout FETCH\_HEAD",
+                "Pull": "git pull http://myuser@127.0.0.1:8080/gerrit refs/changes/97/97/1"
+              }
+            },
+            "ssh": {
+              "url": "ssh://myuser@\*:29418/gerrit",
+              "ref": "refs/changes/97/97/1",
+              "commands": {
+                "Checkout": "git fetch ssh://myuser@\*:29418/gerrit refs/changes/97/97/1 \\u0026\\u0026 git checkout FETCH\_HEAD",
+                "Cherry-Pick": "git fetch ssh://myuser@\*:29418/gerrit refs/changes/97/97/1 \\u0026\\u0026 git cherry-pick FETCH\_HEAD",
+                "Format-Patch": "git fetch ssh://myuser@\*:29418/gerrit refs/changes/97/97/1 \\u0026\\u0026 git format-patch -1 --stdout FETCH\_HEAD",
+                "Pull": "git pull ssh://myuser@\*:29418/gerrit refs/changes/97/97/1"
+              }
+            }
+          },
+          "commit": {
+            "parents": \[
+              {
+                "commit": "1eee2c9d8f352483781e772f35dc586a69ff5646",
+                "subject": "Migrate contributor agreements to All-Projects."
+              }
+            \],
+            "author": {
+              "name": "Shawn O. Pearce",
+              "email": "sop@google.com",
+              "date": "2012-04-24 18:08:08.000000000",
+              "tz": -420
+            },
+            "committer": {
+              "name": "Shawn O. Pearce",
+              "email": "sop@google.com",
+              "date": "2012-04-24 18:08:08.000000000",
+              "tz": -420
+            },
+            "subject": "Use an EventBus to manage star icons",
+            "message": "Use an EventBus to manage star icons\\n\\nImage widgets that need to ..."
+          },
+          "files": {
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/changes/ChangeCache.java": {
+              "lines\_deleted": 8,
+              "size\_delta": -412,
+              "size": 7782
+            },
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/changes/ChangeDetailCache.java": {
+              "lines\_inserted": 1,
+              "size\_delta": 23,
+              "size": 6762
+            },
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/changes/ChangeScreen.java": {
+              "lines\_inserted": 11,
+              "lines\_deleted": 19,
+              "size\_delta": -298,
+              "size": 47023
+            },
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/changes/ChangeTable.java": {
+              "lines\_inserted": 23,
+              "lines\_deleted": 20,
+              "size\_delta": 132,
+              "size": 17727
+            },
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/changes/StarCache.java": {
+              "status": "D",
+              "lines\_deleted": 139,
+              "size\_delta": -5512,
+              "size": 13098
+            },
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/changes/StarredChanges.java": {
+              "status": "A",
+              "lines\_inserted": 204,
+              "size\_delta": 8345,
+              "size": 8345
+            },
+            "gerrit-gwtui/src/main/java/com/google/gerrit/client/ui/Screen.java": {
+              "lines\_deleted": 9,
+              "size\_delta": -343,
+              "size": 5385
+            }
+          }
+        }
+      }
+    }
+  \]
+
+### Get Change
+
+'GET /changes/[{change-id}](#change-id)'
+
+Retrieves a change.
+
+Additional fields can be obtained by adding `o` parameters, each option requires more database lookups and slows down the query response time to the client so they are generally disabled by default. Fields are described in [Query Changes](#list-changes).
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940 HTTP/1.0
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 34,
+    "deletions": 101,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+### Create Merge Patch Set For Change
+
+'POST /changes/[{change-id}](#change-id)/merge'
+
+Update an existing change by using a [MergePatchSetInput](#merge-patch-set-input) entity.
+
+Gerrit will create a merge commit based on the information of MergePatchSetInput and add a new patch set to the change corresponding to the new merge commit.
+
+Request
+
+  POST /changes/test~master~Ic5466d107c5294414710935a8ef3b0180fb848dc/merge  HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "subject": "Merge dev\_branch into master",
+    "merge": {
+      "source": "refs/changes/34/1234/1"
+    }
+  }
+
+As response a [ChangeInfo](#change-info) entity with current revision is returned that describes the resulting change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "test~master~Ic5466d107c5294414710935a8ef3b0180fb848dc",
+    "project": "test",
+    "branch": "master",
+    "hashtags": \[\],
+    "change\_id": "Ic5466d107c5294414710935a8ef3b0180fb848dc",
+    "subject": "Merge dev\_branch into master",
+    "status": "NEW",
+    "created": "2016-09-23 18:08:53.238000000",
+    "updated": "2016-09-23 18:09:25.934000000",
+    "submit\_type": "MERGE\_IF\_NECESSARY",
+    "mergeable": true,
+    "insertions": 5,
+    "deletions": 0,
+    "\_number": 72,
+    "owner": {
+      "\_account\_id": 1000000
+    },
+    "current\_revision": "27cc4558b5a3d3387dd11ee2df7a117e7e581822"
+  }
+
+### Get Change Detail
+
+'GET /changes/[{change-id}](#change-id)/detail'
+
+Retrieves a change with [labels](#labels), [detailed labels](#detailed-labels), [detailed accounts](#detailed-accounts), [reviewer updates](#reviewer-updates), and [messages](#messages).
+
+Additional fields can be obtained by adding `o` parameters, each option requires more database lookups and slows down the query response time to the client so they are generally disabled by default. Fields are described in [Query Changes](#list-changes).
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/detail HTTP/1.0
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the change. This response will contain all votes for each label and include one combined vote. The combined label vote is calculated in the following order (from highest to lowest): REJECTED > APPROVED > DISLIKED > RECOMMENDED.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 126,
+    "deletions": 11,
+    "\_number": 3965,
+    "owner": {
+      "\_account\_id": 1000096,
+      "name": "John Doe",
+      "email": "john.doe@example.com",
+      "username": "jdoe"
+    },
+    "labels": {
+      "Verified": {
+        "all": \[
+          {
+            "value": 0,
+            "\_account\_id": 1000096,
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "username": "jdoe"
+          },
+          {
+            "value": 0,
+            "\_account\_id": 1000097,
+            "name": "Jane Roe",
+            "email": "jane.roe@example.com",
+            "username": "jroe"
+          }
+        \],
+        "values": {
+          "-1": "Fails",
+          " 0": "No score",
+          "+1": "Verified"
+        }
+      },
+      "Code-Review": {
+        "disliked": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "all": \[
+          {
+            "value": -1,
+            "\_account\_id": 1000096,
+            "name": "John Doe",
+            "email": "john.doe@example.com",
+            "username": "jdoe"
+          },
+          {
+            "value": 1,
+            "\_account\_id": 1000097,
+            "name": "Jane Roe",
+            "email": "jane.roe@example.com",
+            "username": "jroe"
+          }
+        \]
+        "values": {
+          "-2": "This shall not be merged",
+          "-1": "I would prefer this is not merged as is",
+          " 0": "No score",
+          "+1": "Looks good to me, but someone else must approve",
+          "+2": "Looks good to me, approved"
+        }
+      }
+    },
+    "permitted\_labels": {
+      "Verified": \[
+        "-1",
+        " 0",
+        "+1"
+      \],
+      "Code-Review": \[
+        "-2",
+        "-1",
+        " 0",
+        "+1",
+        "+2"
+      \]
+    },
+    "removable\_reviewers": \[
+      {
+        "\_account\_id": 1000096,
+        "name": "John Doe",
+        "email": "john.doe@example.com",
+        "username": "jdoe"
+      },
+      {
+        "\_account\_id": 1000097,
+        "name": "Jane Roe",
+        "email": "jane.roe@example.com",
+        "username": "jroe"
+      }
+    \],
+    "reviewers": {
+      "REVIEWER": \[
+        {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        {
+          "\_account\_id": 1000097,
+          "name": "Jane Roe",
+          "email": "jane.roe@example.com",
+          "username": "jroe"
+        }
+      \]
+    },
+    "reviewer\_updates": \[
+      {
+        "state": "REVIEWER",
+        "reviewer": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated\_by": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated": "2016-07-21 20:12:39.000000000"
+      },
+      {
+        "state": "REMOVED",
+        "reviewer": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated\_by": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated": "2016-07-21 20:12:33.000000000"
+      },
+      {
+        "state": "CC",
+        "reviewer": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated\_by": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated": "2016-03-23 21:34:02.419000000",
+      },
+    \],
+    "messages": \[
+      {
+        "id": "YH-egE",
+        "author": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "username": "jdoe"
+        },
+        "updated": "2013-03-23 21:34:02.419000000",
+        "message": "Patch Set 1:\\n\\nThis is the first message.",
+        "revision\_number": 1
+      },
+      {
+        "id": "WEEdhU",
+        "author": {
+          "\_account\_id": 1000097,
+          "name": "Jane Roe",
+          "email": "jane.roe@example.com",
+          "username": "jroe"
+        },
+        "updated": "2013-03-23 21:36:52.332000000",
+        "message": "Patch Set 1:\\n\\nThis is the second message.\\n\\nWith a line break.",
+        "revision\_number": 1
+      }
+    \]
+  }
+
+### Get Topic
+
+'GET /changes/[{change-id}](#change-id)/topic'
+
+Retrieves the topic of a change.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/topic HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "Documentation"
+
+If the change does not have a topic an empty string is returned.
+
+### Set Topic
+
+'PUT /changes/[{change-id}](#change-id)/topic'
+
+Sets the topic of a change.
+
+The new topic must be provided in the request body inside a [TopicInput](#topic-input) entity.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/topic HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "topic": "Documentation"
+  }
+
+As response the new topic is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "Documentation"
+
+If the topic was deleted the response is “204 No Content”.
+
+### Delete Topic
+
+'DELETE /changes/[{change-id}](#change-id)/topic'
+
+Deletes the topic of a change.
+
+Please note that some proxies prohibit request bodies for DELETE requests. In this case, if you want to specify a commit message, use [PUT](#set-topic) to delete the topic.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/topic HTTP/1.0
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Get Assignee
+
+'GET /changes/[{change-id}](#change-id)/assignee'
+
+Retrieves the account of the user assigned to a change.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/assignee HTTP/1.0
+
+As a response an [AccountInfo](rest-api-accounts.html#account-info) entity describing the assigned account is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "\_account\_id": 1000096,
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "username": "jdoe"
+  }
+
+If the change has no assignee the response is “204 No Content”.
+
+### Get Past Assignees
+
+'GET /changes/[{change-id}](#change-id)/past\_assignees'
+
+Returns a list of every user ever assigned to a change, in the order in which they were first assigned.
+
+\[NOTE\] Past assignees are only available when NoteDb is enabled.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/past\_assignees HTTP/1.0
+
+As a response a list of [AccountInfo](rest-api-accounts.html#account-info) entities is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "\_account\_id": 1000051,
+      "name": "Jane Doe",
+      "email": "jane.doe@example.com",
+      "username": "janed"
+    },
+    {
+      "\_account\_id": 1000096,
+      "name": "John Doe",
+      "email": "john.doe@example.com",
+      "username": "jdoe"
+    }
+  \]
+
+### Set Assignee
+
+'PUT /changes/[{change-id}](#change-id)/assignee'
+
+Sets the assignee of a change.
+
+The new assignee must be provided in the request body inside a [AssigneeInput](#assignee-input) entity.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/assignee HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "assignee": "jdoe"
+  }
+
+As a response an [AccountInfo](rest-api-accounts.html#account-info) entity describing the assigned account is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "\_account\_id": 1000096,
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "username": "jdoe"
+  }
+
+### Delete Assignee
+
+'DELETE /changes/[{change-id}](#change-id)/assignee'
+
+Deletes the assignee of a change.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/assignee HTTP/1.0
+
+As a response an [AccountInfo](rest-api-accounts.html#account-info) entity describing the account of the deleted assignee is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "\_account\_id": 1000096,
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "username": "jdoe"
+  }
+
+If the change had no assignee the response is “204 No Content”.
+
+### Abandon Change
+
+'POST /changes/[{change-id}](#change-id)/abandon'
+
+Abandons a change.
+
+The request body does not need to include a [AbandonInput](#abandon-input) entity if no review comment is added.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/abandon HTTP/1.0
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the abandoned change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "ABANDONED",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 3,
+    "deletions": 310,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+If the change cannot be abandoned because the change state doesn’t allow abandoning of the change, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  change is merged
+
+### Restore Change
+
+'POST /changes/[{change-id}](#change-id)/restore'
+
+Restores a change.
+
+The request body does not need to include a [RestoreInput](#restore-input) entity if no review comment is added.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/restore HTTP/1.0
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the restored change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 2,
+    "deletions": 13,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+If the change cannot be restored because the change state doesn’t allow restoring the change, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  change is new
+
+### Rebase Change
+
+'POST /changes/[{change-id}](#change-id)/rebase'
+
+Rebases a change.
+
+Optionally, the parent revision can be changed to another patch set through the [RebaseInput](#rebase-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I3ea943139cb62e86071996f2480e58bf3eeb9dd2/rebase HTTP/1.0
+  Content-Type: application/json;charset=UTF-8
+
+  {
+    "base" : "1234",
+  }
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the rebased change. Information about the current patch set is included.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I3ea943139cb62e86071996f2480e58bf3eeb9dd2",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I3ea943139cb62e86071996f2480e58bf3eeb9dd2",
+    "subject": "Implement Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": false,
+    "insertions": 33,
+    "deletions": 9,
+    "\_number": 4799,
+    "owner": {
+      "name": "John Doe"
+    },
+    "current\_revision": "27cc4558b5a3d3387dd11ee2df7a117e7e581822",
+    "revisions": {
+      "27cc4558b5a3d3387dd11ee2df7a117e7e581822": {
+        "kind": "REWORK",
+        "\_number": 2,
+        "ref": "refs/changes/99/4799/2",
+        "fetch": {
+          "http": {
+            "url": "http://gerrit:8080/myProject",
+            "ref": "refs/changes/99/4799/2"
+          }
+        },
+        "commit": {
+          "parents": \[
+            {
+              "commit": "b4003890dadd406d80222bf1ad8aca09a4876b70",
+              "subject": "Implement Feature A"
+            }
+        \],
+        "author": {
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "date": "2013-05-07 15:21:27.000000000",
+          "tz": 120
+        },
+        "committer": {
+          "name": "Gerrit Code Review",
+          "email": "gerrit-server@example.com",
+          "date": "2013-05-07 15:35:43.000000000",
+          "tz": 120
+        },
+        "subject": "Implement Feature X",
+        "message": "Implement Feature X\\n\\nAdded feature X."
+      }
+    }
+  }
+
+If the change cannot be rebased, e.g. due to conflicts, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  The change could not be rebased due to a path conflict during merge.
+
+### Move Change
+
+'POST /changes/[{change-id}](#change-id)/move'
+
+Move a change.
+
+The destination branch must be provided in the request body inside a [MoveInput](#move-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/move HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "destination\_branch" : "release-branch"
+  }
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the moved change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~release-branch~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "release-branch",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 2,
+    "deletions": 13,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+If the change cannot be moved because the change state doesn’t allow moving the change, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  change is merged
+
+If the change cannot be moved because the user doesn’t have abandon permission on the change or upload permission on the destination, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  move not permitted
+
+### Revert Change
+
+'POST /changes/[{change-id}](#change-id)/revert'
+
+Reverts a change.
+
+The request body does not need to include a [RevertInput](#revert-input) entity if no review comment is added.
+
+Request
+
+  POST /changes/myProject~master~I1ffe09a505e25f15ce1521bcfb222e51e62c2a14/revert HTTP/1.0
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the reverting change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Revert \\"Implementing Feature X\\"",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 6,
+    "deletions": 4,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+If the change cannot be reverted because the change state doesn’t allow reverting the change, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  change is new
+
+### Submit Change
+
+'POST /changes/[{change-id}](#change-id)/submit'
+
+Submits a change.
+
+The request body only needs to include a [SubmitInput](#submit-input) entity if submitting on behalf of another user.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/submit HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "on\_behalf\_of": 1001439
+  }
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the submitted/merged change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "MERGED",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "submitted": "2013-02-21 11:16:36.615000000",
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+If the change cannot be submitted because the submit rule doesn’t allow submitting the change, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  blocked by Verified
+
+### Changes Submitted Together
+
+'GET /changes/[{change-id}](#change-id)/submitted\_together?o=NON\_VISIBLE\_CHANGES'
+
+Computes list of all changes which are submitted when [Submit](#submit-change) is called for this change, including the current change itself.
+
+The list consists of:
+
+*   The given change.
+
+*   If [`change.submitWholeTopic`](config-gerrit.html#change.submitWholeTopic) is enabled, include all open changes with the same topic.
+
+*   For each change whose submit type is not CHERRY\_PICK, include unmerged ancestors targeting the same branch.
+
+
+As a special case, the list is empty if this change would be submitted by itself (without other changes).
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/submitted\_together?o=NON\_VISIBLE\_CHANGES HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+As a response a [SubmittedTogetherInfo](#submitted-together-info) entity is returned that describes what would happen if the change were submitted. This response contains a list of changes and a count of changes that are not visible to the caller that are part of the set of changes to be merged.
+
+The listed changes use the same format as in [Query Changes](#list-changes) with the [`LABELS`](#labels), [`DETAILED_LABELS`](#detailed-labels), [`CURRENT_REVISION`](#current-revision), [`CURRENT_COMMIT`](#current-commit), and [`SUBMITTABLE`](#submittable) options set.
+
+Standard [formatting options](#query-options) can be specified with the `o` parameter, as well as the `submitted_together` specific option `NON_VISIBLE_CHANGES`.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+)\]}'
+{
+  "changes": \[
+    {
+      "id": "gerrit~master~I1ffe09a505e25f15ce1521bcfb222e51e62c2a14",
+      "project": "gerrit",
+      "branch": "master",
+      "hashtags": \[\],
+      "change\_id": "I1ffe09a505e25f15ce1521bcfb222e51e62c2a14",
+      "subject": "ChangeMergeQueue: Rewrite such that it works on set of changes",
+      "status": "NEW",
+      "created": "2015-05-01 15:39:57.979000000",
+      "updated": "2015-05-20 19:25:21.592000000",
+      "mergeable": true,
+      "insertions": 303,
+      "deletions": 210,
+      "\_number": 1779,
+      "owner": {
+        "\_account\_id": 1000000
+      },
+      "labels": {
+        "Code-Review": {
+          "approved": {
+            "\_account\_id": 1000000
+          },
+          "all": \[
+            {
+              "value": 2,
+              "date": "2015-05-20 19:25:21.592000000",
+              "\_account\_id": 1000000
+            }
+          \],
+          "values": {
+            "-2": "This shall not be merged",
+            "-1": "I would prefer this is not merged as is",
+            " 0": "No score",
+            "+1": "Looks good to me, but someone else must approve",
+            "+2": "Looks good to me, approved"
+          },
+          "default\_value": 0
+        },
+        "Verified": {
+          "approved": {
+            "\_account\_id": 1000000
+          },
+          "all": \[
+            {
+              "value": 1,
+              "date": "2015-05-20 19:25:21.592000000",
+              "\_account\_id": 1000000
+            }
+          \],
+          "values": {
+            "-1": "Fails",
+            " 0": "No score",
+            "+1": "Verified"
+          },
+          "default\_value": 0
+        }
+      },
+      "permitted\_labels": {
+        "Code-Review": \[
+          "-2",
+          "-1",
+          " 0",
+          "+1",
+          "+2"
+        \],
+        "Verified": \[
+          "-1",
+          " 0",
+          "+1"
+        \]
+      },
+      "removable\_reviewers": \[
+        {
+          "\_account\_id": 1000000
+        }
+      \],
+      "reviewers": {
+        "REVIEWER": \[
+          {
+            "\_account\_id": 1000000
+          }
+        \]
+      },
+      "current\_revision": "9adb9f4c7b40eeee0646e235de818d09164d7379",
+      "revisions": {
+        "9adb9f4c7b40eeee0646e235de818d09164d7379": {
+          "kind": "REWORK",
+          "\_number": 1,
+          "created": "2015-05-01 15:39:57.979000000",
+          "uploader": {
+            "\_account\_id": 1000000
+          },
+          "ref": "refs/changes/79/1779/1",
+          "fetch": {},
+          "commit": {
+            "parents": \[
+              {
+                "commit": "2d3176497a2747faed075f163707e57d9f961a1c",
+                "subject": "Merge changes from topic \\u0027submodule-subscription-tests-and-fixes-3\\u0027"
+              }
+            \],
+            "author": {
+              "name": "Stefan Beller",
+              "email": "sbeller@google.com",
+              "date": "2015-04-29 21:36:52.000000000",
+              "tz": -420
+            },
+            "committer": {
+              "name": "Stefan Beller",
+              "email": "sbeller@google.com",
+              "date": "2015-05-01 00:11:16.000000000",
+              "tz": -420
+            },
+            "subject": "ChangeMergeQueue: Rewrite such that it works on set of changes",
+            "message": "ChangeMergeQueue: Rewrite such that it works on set of changes\\n\\nChangeMergeQueue used to work on branches rather than sets of changes.\\nThis change is a first step to merge sets of changes (e.g. grouped by a\\ntopic and \`changes.submitWholeTopic\` enabled) in an atomic fashion.\\nThis change doesn\\u0027t aim to implement these changes, but only as a step\\ntowards it.\\n\\nMergeOp keeps its functionality and behavior as is. A new class\\nMergeOpMapper is introduced which will map the set of changes to\\nthe set of branches. Additionally the MergeOpMapper is also\\nresponsible for the threading done right now, which was part of\\nthe ChangeMergeQueue before.\\n\\nChange-Id: I1ffe09a505e25f15ce1521bcfb222e51e62c2a14\\n"
+          }
+        }
+      }
+    },
+    {
+      "id": "gerrit~master~I7fe807e63792b3d26776fd1422e5e790a5697e22",
+      "project": "gerrit",
+      "branch": "master",
+      "hashtags": \[\],
+      "change\_id": "I7fe807e63792b3d26776fd1422e5e790a5697e22",
+      "subject": "AbstractSubmoduleSubscription: Split up createSubscription",
+      "status": "NEW",
+      "created": "2015-05-01 15:39:57.979000000",
+      "updated": "2015-05-20 19:25:21.546000000",
+      "mergeable": true,
+      "insertions": 15,
+      "deletions": 6,
+      "\_number": 1780,
+      "owner": {
+        "\_account\_id": 1000000
+      },
+      "labels": {
+        "Code-Review": {
+          "approved": {
+            "\_account\_id": 1000000
+          },
+          "all": \[
+            {
+              "value": 2,
+              "date": "2015-05-20 19:25:21.546000000",
+              "\_account\_id": 1000000
+            }
+          \],
+          "values": {
+            "-2": "This shall not be merged",
+            "-1": "I would prefer this is not merged as is",
+            " 0": "No score",
+            "+1": "Looks good to me, but someone else must approve",
+            "+2": "Looks good to me, approved"
+          },
+          "default\_value": 0
+        },
+        "Verified": {
+          "approved": {
+            "\_account\_id": 1000000
+          },
+          "all": \[
+            {
+              "value": 1,
+              "date": "2015-05-20 19:25:21.546000000",
+              "\_account\_id": 1000000
+            }
+          \],
+          "values": {
+            "-1": "Fails",
+            " 0": "No score",
+            "+1": "Verified"
+          },
+          "default\_value": 0
+        }
+      },
+      "permitted\_labels": {
+        "Code-Review": \[
+          "-2",
+          "-1",
+          " 0",
+          "+1",
+          "+2"
+        \],
+        "Verified": \[
+          "-1",
+          " 0",
+          "+1"
+        \]
+      },
+      "removable\_reviewers": \[
+        {
+          "\_account\_id": 1000000
+        }
+      \],
+      "reviewers": {
+        "REVIEWER": \[
+          {
+            "\_account\_id": 1000000
+          }
+        \]
+      },
+      "current\_revision": "1bd7c12a38854a2c6de426feec28800623f492c4",
+      "revisions": {
+        "1bd7c12a38854a2c6de426feec28800623f492c4": {
+          "kind": "REWORK",
+          "\_number": 1,
+          "created": "2015-05-01 15:39:57.979000000",
+          "uploader": {
+            "\_account\_id": 1000000
+          },
+          "ref": "refs/changes/80/1780/1",
+          "fetch": {},
+          "commit": {
+            "parents": \[
+              {
+                "commit": "9adb9f4c7b40eeee0646e235de818d09164d7379",
+                "subject": "ChangeMergeQueue: Rewrite such that it works on set of changes"
+              }
+            \],
+            "author": {
+              "name": "Stefan Beller",
+              "email": "sbeller@google.com",
+              "date": "2015-04-25 00:11:59.000000000",
+              "tz": -420
+            },
+            "committer": {
+              "name": "Stefan Beller",
+              "email": "sbeller@google.com",
+              "date": "2015-05-01 00:11:16.000000000",
+              "tz": -420
+            },
+            "subject": "AbstractSubmoduleSubscription: Split up createSubscription",
+            "message": "AbstractSubmoduleSubscription: Split up createSubscription\\n\\nLater we want to have subscriptions to more submodules, so we need to\\nfind a way to add more submodule entries into the file. By splitting up\\nthe createSubscription() method, that is very easy by using the\\naddSubmoduleSubscription method multiple times.\\n\\nChange-Id: I7fe807e63792b3d26776fd1422e5e790a5697e22\\n"
+          }
+        }
+      }
+    }
+  \],
+  "non\_visible\_changes": 0
+}
+
+If the `o=NON_VISIBLE_CHANGES` query parameter is not passed, then instead of a [SubmittedTogetherInfo](#submitted-together-info) entity, the response is a list of changes, or a 403 response with a message if the set of changes to be submitted with this change includes changes the caller cannot read.
+
+### Publish Draft Change
+
+'POST /changes/[{change-id}](#change-id)/publish'
+
+Publishes a draft change.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/publish HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Delete Change
+
+'DELETE /changes/[{change-id}](#change-id)'
+
+Deletes a change.
+
+New or abandoned changes can be deleted by their owner if the user is granted the [Delete Own Changes](access-control.html#category_delete_own_changes) permission, otherwise only by administrators.
+
+Draft changes can only be deleted by their owner or other users who have the permissions to view and delete drafts. If the draft workflow is disabled, only administrators with those permissions may delete draft changes.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940 HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Get Included In
+
+'GET /changes/[{change-id}](#change-id)/in'
+
+Retrieves the branches and tags in which a change is included. As result an [IncludedInInfo](#included-in-info) entity is returned.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/in HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "branches": \[
+      "master"
+    \],
+    "tags": \[\]
+  }
+
+### Index Change
+
+'POST /changes/[{change-id}](#change-id)/index'
+
+Adds or updates the change in the secondary index.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/index HTTP/1.0
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### List Change Comments
+
+'GET /changes/[{change-id}](#change-id)/comments'
+
+Lists the published comments of all revisions of the change.
+
+Returns a map of file paths to lists of [CommentInfo](#comment-info) entries. The entries in the map are sorted by file path, and the comments for each path are sorted by patch set number. Each comment has the `patch_set` and `author` fields set.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/comments HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+      {
+        "patch\_set": 1,
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "\[nit\] trailing whitespace",
+        "updated": "2013-02-26 15:40:43.986000000"
+        "author": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com"
+        }
+      },
+      {
+        "patch\_set": 2,
+        "id": "TveXwFiA",
+        "line": 49,
+        "in\_reply\_to": "TfYX-Iuo",
+        "message": "Done",
+        "updated": "2013-02-26 15:40:45.328000000"
+        "author": {
+          "\_account\_id": 1000097,
+          "name": "Jane Roe",
+          "email": "jane.roe@example.com"
+        }
+      }
+    \]
+  }
+
+### List Change Robot Comments
+
+'GET /changes/[{change-id}](#change-id)/robotcomments'
+
+Lists the robot comments of all revisions of the change.
+
+Return a map that maps the file path to a list of [RobotCommentInfo](#robot-comment-info) entries. The entries in the map are sorted by file path.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/robotcomments/ HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+      {
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "unused import",
+        "updated": "2016-02-26 15:40:43.986000000",
+        "author": {
+          "\_account\_id": 1000110,
+          "name": "Code Analyzer",
+          "email": "code.analyzer@example.com"
+        },
+        "robotId": "importChecker",
+        "robotRunId": "76b1375aa8626ea7149792831fe2ed85e80d9e04"
+      },
+      {
+        "id": "TveXwFiA",
+        "line": 49,
+        "message": "wrong indention",
+        "updated": "2016-02-26 15:40:45.328000000",
+        "author": {
+          "\_account\_id": 1000110,
+          "name": "Code Analyzer",
+          "email": "code.analyzer@example.com"
+        },
+        "robotId": "styleChecker",
+        "robotRunId": "5c606c425dd45184484f9d0a2ffd725a7607839b"
+      }
+    \]
+  }
+
+### List Change Drafts
+
+'GET /changes/[{change-id}](#change-id)/drafts'
+
+Lists the draft comments of all revisions of the change that belong to the calling user.
+
+Returns a map of file paths to lists of [CommentInfo](#comment-info) entries. The entries in the map are sorted by file path, and the comments for each path are sorted by patch set number. Each comment has the `patch_set` field set, and no `author`.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/drafts HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+      {
+        "patch\_set": 1,
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "\[nit\] trailing whitespace",
+        "updated": "2013-02-26 15:40:43.986000000"
+      },
+      {
+        "patch\_set": 2,
+        "id": "TveXwFiA",
+        "line": 49,
+        "in\_reply\_to": "TfYX-Iuo",
+        "message": "Done",
+        "updated": "2013-02-26 15:40:45.328000000"
+      }
+    \]
+  }
+
+### Check Change
+
+'GET /changes/[{change-id}](#change-id)/check'
+
+Performs consistency checks on the change, and returns a [ChangeInfo](#change-info) entity with the `problems` field set to a list of [ProblemInfo](#problem-info) entities.
+
+Depending on the type of problem, some fields not marked optional may be missing from the result. At least `id`, `project`, `branch`, and `_number` will be present.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/check HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 34,
+    "deletions": 101,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    },
+    "problems": \[
+      {
+        "message": "Current patch set 1 not found"
+      }
+    \]
+  }
+
+### Fix Change
+
+'POST /changes/[{change-id}](#change-id)/check'
+
+Performs consistency checks on the change as with [GET /check](#check-change), and additionally fixes any problems that can be fixed automatically. The returned field values reflect any fixes.
+
+Some fixes have options controlling their behavior, which can be set in the [FixInput](#fix-input) entity body.
+
+Only the change owner, a project owner, or an administrator may fix changes.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/check HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "MERGED",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "submitted": "2013-02-21 11:16:36.615000000",
+    "mergeable": true,
+    "insertions": 34,
+    "deletions": 101,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    },
+    "problems": \[
+      {
+        "message": "Current patch set 2 not found"
+      },
+      {
+        "message": "Patch set 1 (1eee2c9d8f352483781e772f35dc586a69ff5646) is merged into destination ref master (1eee2c9d8f352483781e772f35dc586a69ff5646), but change status is NEW",
+        "status": FIXED,
+        "outcome": "Marked change as merged"
+      }
+    \]
+  }
+
+### Get Hashtags
+
+'GET /changes/[{change-id}](#change-id)/hashtags'
+
+Gets the hashtags associated with a change.
+
+\[NOTE\] Hashtags are only available when NoteDb is enabled.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/hashtags HTTP/1.0
+
+As response the change’s hashtags are returned as a list of strings.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    "hashtag1",
+    "hashtag2"
+  \]
+
+### Set Hashtags
+
+'POST /changes/[{change-id}](#change-id)/hashtags'
+
+Adds and/or removes hashtags from a change.
+
+\[NOTE\] Hashtags are only available when NoteDb is enabled.
+
+The hashtags to add or remove must be provided in the request body inside a [HashtagsInput](#hashtags-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/hashtags HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "add" : \[
+      "hashtag3"
+    \],
+    "remove" : \[
+      "hashtag2"
+    \]
+  }
+
+As response the change’s hashtags are returned as a list of strings.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    "hashtag1",
+    "hashtag3"
+  \]
+
+## Change Edit Endpoints
+
+### Get Change Edit Details
+
+'GET /changes/[{change-id}](#change-id)/edit
+
+Retrieves a change edit details.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit HTTP/1.0
+
+As response an [EditInfo](#edit-info) entity is returned that describes the change edit, or “204 No Content” when change edit doesn’t exist for this change. Change edits are stored on special branches and there can be max one edit per user per change. Edits aren’t tracked in the database. When request parameter `list` is provided the response also includes the file list. When `base` request parameter is provided the file list is computed against this base revision. When request parameter `download-commands` is provided fetch info map is also included.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "commit":{
+      "parents":\[
+        {
+          "commit":"1eee2c9d8f352483781e772f35dc586a69ff5646",
+        }
+      \],
+      "author":{
+        "name":"Shawn O. Pearce",
+        "email":"sop@google.com",
+        "date":"2012-04-24 18:08:08.000000000",
+        "tz":-420
+       },
+       "committer":{
+         "name":"Shawn O. Pearce",
+         "email":"sop@google.com",
+         "date":"2012-04-24 18:08:08.000000000",
+         "tz":-420
+       },
+       "subject":"Use an EventBus to manage star icons",
+       "message":"Use an EventBus to manage star icons\\n\\nImage widgets that need to ..."
+    },
+    "base\_revision":"c35558e0925e6985c91f3a16921537d5e572b7a3"
+  }
+
+### Change file content in Change Edit
+
+'PUT /changes/[{change-id}](#change-id)/edit/path%2fto%2ffile
+
+Put content of a file to a change edit.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit/foo HTTP/1.0
+
+When change edit doesn’t exist for this change yet it is created. When file content isn’t provided, it is wiped out for that file. As response “204 No Content” is returned.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Restore file content or rename files in Change Edit
+
+'POST /changes/[{change-id}](#change-id)/edit
+
+Creates empty change edit, restores file content or renames files in change edit. The request body needs to include a [ChangeEditInput](#change-edit-input) entity when a file within change edit should be restored or old and new file names to rename a file.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "restore\_path": "foo"
+  }
+
+or for rename:
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "old\_path": "foo",
+    "new\_path": "bar"
+  }
+
+When change edit doesn’t exist for this change yet it is created. When path and restore flag are provided in request body, this file is restored. When old and new file names are provided, the file is renamed. As response “204 No Content” is returned.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Change commit message in Change Edit
+
+'PUT /changes/[{change-id}](#change-id)/edit:message
+
+Modify commit message. The request body needs to include a [ChangeEditMessageInput](#change-edit-message-input) entity.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit:message HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "message": "New commit message\\n\\nChange-Id: I10394472cbd17dd12454f229e4f6de00b143a444"
+  }
+
+If a change edit doesn’t exist for this change yet, it is created. As response “204 No Content” is returned.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Delete file in Change Edit
+
+'DELETE /changes/[{change-id}](#change-id)/edit/path%2fto%2ffile'
+
+Deletes a file from a change edit. This deletes the file from the repository completely. This is not the same as reverting or restoring a file to its previous contents.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit/foo HTTP/1.0
+
+When change edit doesn’t exist for this change yet it is created.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Retrieve file content from Change Edit
+
+'GET /changes/[{change-id}](#change-id)/edit/path%2fto%2ffile
+
+Retrieves content of a file from a change edit.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit/foo HTTP/1.0
+
+The content of the file is returned as text encoded inside base64. The Content-Type header will always be `text/plain` reflecting the outer base64 encoding. A Gerrit-specific `X-FYI-Content-Type` header can be examined to find the server detected content type of the file.
+
+When the specified file was deleted in the change edit “204 No Content” is returned.
+
+If only the content type is required, callers should use HEAD to avoid downloading the encoded file contents.
+
+If the `base` parameter is set to true, the returned content is from the revision that the edit is based on.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=ISO-8859-1
+  X-FYI-Content-Encoding: base64
+  X-FYI-Content-Type: text/xml
+
+  RnJvbSA3ZGFkY2MxNTNmZGVhMTdhYTg0ZmYzMmE2ZTI0NWRiYjY...
+
+Alternatively, if the only value of the Accept request header is `application/json` the content is returned as JSON string and `X-FYI-Content-Encoding` is set to `json`.
+
+### Retrieve meta data of a file from Change Edit
+
+'GET /changes/[{change-id}](#change-id)/edit/path%2fto%2ffile/meta
+
+Retrieves meta data of a file from a change edit. Currently only web links are returned.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit/foo/meta HTTP/1.0
+
+This REST endpoint retrieves additional information for a file in a change edit. As result an [EditFileInfo](#edit-file-info) entity is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+  "web\_links":\[
+    {
+      "show\_on\_side\_by\_side\_diff\_view": true,
+      "name": "side-by-side preview diff",
+      "image\_url": "plugins/xdocs/static/sideBySideDiffPreview.png",
+      "url": "#/x/xdocs/c/42/1..0/README.md",
+      "target": "\_self"
+    },
+    {
+      "show\_on\_unified\_diff\_view": true,
+      "name": "unified preview diff",
+      "image\_url": "plugins/xdocs/static/unifiedDiffPreview.png",
+      "url": "#/x/xdocs/c/42/1..0/README.md,unified",
+      "target": "\_self"
+    }
+  \]}
+
+### Retrieve commit message from Change Edit or current patch set of the change
+
+'GET /changes/[{change-id}](#change-id)/edit:message
+
+Retrieves commit message from change edit.
+
+If the `base` parameter is set to true, the returned message is from the revision that the edit is based on.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit:message HTTP/1.0
+
+The commit message is returned as base64 encoded string.
+
+Response
+
+  HTTP/1.1 200 OK
+
+  VGhpcyBpcyBhIGNvbW1pdCBtZXNzYWdlCgpDaGFuZ2UtSWQ6IElhYzhmZGM1MGRlZjFiYWUzYjAz
+M2JhNjcxZTk0OTBmNzUxNDU5ZGUzCg==
+
+Alternatively, if the only value of the Accept request header is `application/json` the commit message is returned as JSON string:
+
+Response
+
+  HTTP/1.1 200 OK
+
+)\]}'
+"Subject of the commit message\\n\\nThis is the body of the commit message.\\n\\nChange-Id: Iaf1ba916bf843c175673d675bf7f52862f452db9\\n"
+
+### Publish Change Edit
+
+'POST /changes/[{change-id}](#change-id)/edit:publish
+
+Promotes change edit to a regular patch set.
+
+Options can be provided in the request body as a [PublishChangeEditInput](#publish-change-edit-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit:publish HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "notify": "NONE"
+  }
+
+As response “204 No Content” is returned.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Rebase Change Edit
+
+'POST /changes/[{change-id}](#change-id)/edit:rebase
+
+Rebases change edit on top of latest patch set.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit:rebase HTTP/1.0
+
+When change was rebased on top of latest patch set, response “204 No Content” is returned. When change edit is already based on top of the latest patch set, the response “409 Conflict” is returned.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Delete Change Edit
+
+'DELETE /changes/[{change-id}](#change-id)/edit'
+
+Deletes change edit.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/edit HTTP/1.0
+
+As response “204 No Content” is returned.
+
+Response
+
+  HTTP/1.1 204 No Content
+
+## Reviewer Endpoints
+
+### List Reviewers
+
+'GET /changes/[{change-id}](#change-id)/reviewers/'
+
+Lists the reviewers of a change.
+
+As result a list of [ReviewerInfo](#reviewer-info) entries is returned.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/ HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "approvals": {
+        "Verified": "+1",
+        "Code-Review": "+2"
+      },
+      "\_account\_id": 1000096,
+      "name": "John Doe",
+      "email": "john.doe@example.com"
+    },
+    {
+      "approvals": {
+        "Verified": " 0",
+        "Code-Review": "-1"
+      },
+      "\_account\_id": 1000097,
+      "name": "Jane Roe",
+      "email": "jane.roe@example.com"
+    }
+  \]
+
+### Suggest Reviewers
+
+'GET /changes/[{change-id}](#change-id)/suggest\_reviewers?q=J&n=5'
+
+Suggest the reviewers for a given query `q` and result limit `n`. If result limit is not passed, then the default 10 is used.
+
+As result a list of [SuggestedReviewerInfo](#suggested-reviewer-info) entries is returned.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/suggest\_reviewers?q=J HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "account": {
+        "\_account\_id": 1000097,
+        "name": "Jane Roe",
+        "email": "jane.roe@example.com"
+      },
+      "count": 1
+    },
+    {
+      "group": {
+        "id": "4fd581c0657268f2bdcc26699fbf9ddb76e3a279",
+        "name": "Joiner"
+      },
+      "count": 5
+    }
+  \]
+
+### Get Reviewer
+
+'GET /changes/[{change-id}](#change-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)'
+
+Retrieves a reviewer of a change.
+
+As response a [ReviewerInfo](#reviewer-info) entity is returned that describes the reviewer.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/john.doe@example.com HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "approvals": {
+      "Verified": "+1",
+      "Code-Review": "+2"
+    },
+    "\_account\_id": 1000096,
+    "name": "John Doe",
+    "email": "john.doe@example.com"
+  }
+
+### Add Reviewer
+
+'POST /changes/[{change-id}](#change-id)/reviewers'
+
+Adds one user or all members of one group as reviewer to the change.
+
+The reviewer to be added to the change must be provided in the request body as a [ReviewerInput](#reviewer-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "reviewer": "john.doe@example.com"
+  }
+
+As response an [AddReviewerResult](#add-reviewer-result) entity is returned that describes the newly added reviewers.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "reviewers": \[
+      {
+        "input": "john.doe@example.com",
+        "approvals": {
+          "Verified": " 0",
+          "Code-Review": " 0"
+        },
+        "\_account\_id": 1000096,
+        "name": "John Doe",
+        "email": "john.doe@example.com"
+      }
+    \]
+  }
+
+If a group is specified, adding the group members as reviewers is an atomic operation. This means if an error is returned, none of the members are added as reviewer.
+
+If a group with many members is added as reviewer a confirmation may be required.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "reviewer": "MyProjectVerifiers"
+  }
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "input": "MyProjectVerifiers",
+    "error": "The group My Group has 15 members. Do you want to add them all as reviewers?",
+    "confirm": true
+  }
+
+To confirm the addition of the reviewers, resend the request with the `confirmed` flag being set.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "input": "MyProjectVerifiers",
+    "confirmed": true
+  }
+
+### Delete Reviewer
+
+'DELETE /changes/[{change-id}](#change-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)'
+'POST /changes/[{change-id}](#change-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)/delete'
+
+Deletes a reviewer from a change.
+
+Options can be provided in the request body as a [DeleteReviewerInput](#delete-reviewer-input) entity.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe HTTP/1.0
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe/delete HTTP/1.0
+
+Please note that some proxies prohibit request bodies for DELETE requests. In this case, if you want to specify options, use a POST request:
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe/delete HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "notify": "NONE"
+  }
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### List Votes
+
+'GET /changes/[{change-id}](#change-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)/votes/'
+
+Lists the votes for a specific reviewer of the change.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe/votes/ HTTP/1.0
+
+As result a map is returned that maps the label name to the label value. The entries in the map are sorted by label name.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json;charset=UTF-8
+
+  )\]}'
+  {
+    "Code-Review": -1,
+    "Verified": 1
+    "Work-In-Progress": 1,
+  }
+
+### Delete Vote
+
+'DELETE /changes/[{change-id}](#change-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)/votes/[{label-id}](#label-id)'
+'POST /changes/[{change-id}](#change-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)/votes/[{label-id}](#label-id)/delete'
+
+Deletes a single vote from a change. Note, that even when the last vote of a reviewer is removed the reviewer itself is still listed on the change.
+
+Options can be provided in the request body as a [DeleteVoteInput](#delete-vote-input) entity.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe/votes/Code-Review HTTP/1.0
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe/votes/Code-Review/delete HTTP/1.0
+
+Please note that some proxies prohibit request bodies for DELETE requests. In this case, if you want to specify options, use a POST request:
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/reviewers/John%20Doe/votes/Code-Review/delete HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "notify": "NONE"
+  }
+
+Response
+
+  HTTP/1.1 204 No Content
+
+## Revision Endpoints
+
+### Get Commit
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/commit'
+
+Retrieves a parsed commit of a revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/commit HTTP/1.0
+
+As response a [CommitInfo](#commit-info) entity is returned that describes the revision.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "commit": "674ac754f91e64a0efb8087e59a176484bd534d1",
+    "parents": \[
+      {
+        "commit": "1eee2c9d8f352483781e772f35dc586a69ff5646",
+        "subject": "Migrate contributor agreements to All-Projects."
+      }
+    \],
+    "author": {
+      "name": "Shawn O. Pearce",
+      "email": "sop@google.com",
+      "date": "2012-04-24 18:08:08.000000000",
+      "tz": -420
+    },
+    "committer": {
+      "name": "Shawn O. Pearce",
+      "email": "sop@google.com",
+      "date": "2012-04-24 18:08:08.000000000",
+      "tz": -420
+    },
+    "subject": "Use an EventBus to manage star icons",
+    "message": "Use an EventBus to manage star icons\\n\\nImage widgets that need to ..."
+  }
+
+Adding query parameter `links` (for example `/changes/…​/commit?links`) returns a [CommitInfo](#commit-info) with the additional field `web_links`.
+
+### Get Description
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/description'
+
+Retrieves the description of a patch set.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/description HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "Added Documentation"
+
+If the patch set does not have a description an empty string is returned.
+
+### Set Description
+
+'PUT /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/description'
+
+Sets the description of a patch set.
+
+The new description must be provided in the request body inside a [DescriptionInput](#description-input) entity.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/description HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "description": "Added Documentation"
+  }
+
+As response the new description is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "Added Documentation"
+
+### Get Merge List
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/mergelist'
+
+Returns the list of commits that are being integrated into a target branch by a merge commit. By default the first parent is assumed to be uninteresting. By using the `parent` option another parent can be set as uninteresting (parents are 1-based).
+
+The list of commits is returned as a list of [CommitInfo](#commit-info) entities. Web links are only included if the `links` option was set.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/7e30d802b890ec8d0be45b1cc2a8ef092bcfc858/mergelist HTTP/1.0
+
+Response
+
+HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "commit": "674ac754f91e64a0efb8087e59a176484bd534d1",
+      "parents": \[
+        {
+          "commit": "1eee2c9d8f352483781e772f35dc586a69ff5646",
+          "subject": "Migrate contributor agreements to All-Projects."
+        }
+      \],
+      "author": {
+        "name": "Shawn O. Pearce",
+        "email": "sop@google.com",
+        "date": "2012-04-24 18:08:08.000000000",
+        "tz": -420
+      },
+      "committer": {
+        "name": "Shawn O. Pearce",
+        "email": "sop@google.com",
+        "date": "2012-04-24 18:08:08.000000000",
+        "tz": -420
+      },
+      "subject": "Use an EventBus to manage star icons",
+      "message": "Use an EventBus to manage star icons\\n\\nImage widgets that need to ..."
+    }
+  \]
+
+### Get Revision Actions
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/actions'
+
+Retrieves revision [actions](#action-info) of the revision of a change.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/actions' HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+
+{
+  "submit": {
+    "method": "POST",
+    "label": "Submit",
+    "title": "Submit patch set 1 into master",
+    "enabled": true
+  },
+  "cherrypick": {
+    "method": "POST",
+    "label": "Cherry Pick",
+    "title": "Cherry pick change to a different branch",
+    "enabled": true
+  }
+}
+
+The response is a flat map of possible revision actions mapped to their [ActionInfo](#action-info).
+
+### Get Review
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/review'
+
+Retrieves a review of a revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/review HTTP/1.0
+
+As response a [ChangeInfo](#change-info) entity with [detailed labels](#detailed-labels) and [detailed accounts](#detailed-accounts) is returned that describes the review of the revision. The revision for which the review is retrieved is contained in the `revisions` field. In addition the `current_revision` field is set if the revision for which the review is retrieved is the current revision of the change. Please note that the returned labels are always for the current patch set.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9940",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 34,
+    "deletions": 45,
+    "\_number": 3965,
+    "owner": {
+      "\_account\_id": 1000096,
+      "name": "John Doe",
+      "email": "john.doe@example.com"
+    },
+    "labels": {
+      "Verified": {
+        "all": \[
+          {
+            "value": 0,
+            "\_account\_id": 1000096,
+            "name": "John Doe",
+            "email": "john.doe@example.com"
+          },
+          {
+            "value": 0,
+            "\_account\_id": 1000097,
+            "name": "Jane Roe",
+            "email": "jane.roe@example.com"
+          }
+        \],
+        "values": {
+          "-1": "Fails",
+          " 0": "No score",
+          "+1": "Verified"
+        }
+      },
+      "Code-Review": {
+        "all": \[
+          {
+            "value": -1,
+            "\_account\_id": 1000096,
+            "name": "John Doe",
+            "email": "john.doe@example.com"
+          },
+          {
+            "value": 1,
+            "\_account\_id": 1000097,
+            "name": "Jane Roe",
+            "email": "jane.roe@example.com"
+          }
+        \]
+        "values": {
+          "-2": "This shall not be merged",
+          "-1": "I would prefer this is not merged as is",
+          " 0": "No score",
+          "+1": "Looks good to me, but someone else must approve",
+          "+2": "Looks good to me, approved"
+        }
+      }
+    },
+    "permitted\_labels": {
+      "Verified": \[
+        "-1",
+        " 0",
+        "+1"
+      \],
+      "Code-Review": \[
+        "-2",
+        "-1",
+        " 0",
+        "+1",
+        "+2"
+      \]
+    },
+    "removable\_reviewers": \[
+      {
+        "\_account\_id": 1000096,
+        "name": "John Doe",
+        "email": "john.doe@example.com"
+      },
+      {
+        "\_account\_id": 1000097,
+        "name": "Jane Roe",
+        "email": "jane.roe@example.com"
+      }
+    \],
+    "reviewers": {
+      "REVIEWER": \[
+        {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com"
+        },
+        {
+          "\_account\_id": 1000097,
+          "name": "Jane Roe",
+          "email": "jane.roe@example.com"
+        }
+      \]
+    },
+    "current\_revision": "674ac754f91e64a0efb8087e59a176484bd534d1",
+    "revisions": {
+      "674ac754f91e64a0efb8087e59a176484bd534d1": {
+        "kind": "REWORK",
+        "\_number": 2,
+        "ref": "refs/changes/65/3965/2",
+        "fetch": {
+          "http": {
+            "url": "http://gerrit/myProject",
+            "ref": "refs/changes/65/3965/2"
+          }
+        }
+      }
+    }
+  }
+
+### Get Related Changes
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/related'
+
+Retrieves related changes of a revision. Related changes are changes that either depend on, or are dependencies of the revision.
+
+Request
+
+  GET /changes/gerrit~master~I5e4fc08ce34d33c090c9e0bf320de1b17309f774/revisions/b1cb4caa6be46d12b94c25aa68aebabcbb3f53fe/related HTTP/1.0
+
+As result a [RelatedChangesInfo](#related-changes-info) entity is returned describing the related changes.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "changes": \[
+      {
+        "change\_id": "Ic62ae3103fca2214904dbf2faf4c861b5f0ae9b5",
+        "commit": {
+          "commit": "78847477532e386f5a2185a4e8c90b2509e354e3",
+          "parents": \[
+            {
+              "commit": "bb499510bbcdbc9164d96b0dbabb4aa45f59a87e"
+            }
+          \],
+          "author": {
+            "name": "David Ostrovsky",
+            "email": "david@ostrovsky.org",
+            "date": "2014-07-12 15:04:24.000000000",
+            "tz": 120
+          },
+          "subject": "Remove Solr"
+        },
+        "\_change\_number": 58478,
+        "\_revision\_number": 2,
+        "\_current\_revision\_number": 2
+        "status": "NEW"
+      },
+      {
+        "change\_id": "I5e4fc08ce34d33c090c9e0bf320de1b17309f774",
+        "commit": {
+          "commit": "b1cb4caa6be46d12b94c25aa68aebabcbb3f53fe",
+          "parents": \[
+            {
+              "commit": "d898f12a9b7a92eb37e7a80636195a1b06417aad"
+            }
+          \],
+          "author": {
+            "name": "David Pursehouse",
+            "email": "david.pursehouse@sonymobile.com",
+            "date": "2014-06-24 02:01:28.000000000",
+            "tz": 540
+          },
+          "subject": "Add support for secondary index with Elasticsearch"
+        },
+        "\_change\_number": 58081,
+        "\_revision\_number": 10,
+        "\_current\_revision\_number": 10
+        "status": "NEW"
+      }
+    \]
+  }
+
+### Set Review
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/review'
+
+Sets a review on a revision.
+
+The review must be provided in the request body as a [ReviewInput](#review-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/review HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "tag": "jenkins",
+    "message": "Some nits need to be fixed.",
+    "labels": {
+      "Code-Review": -1
+    },
+    "comments": {
+      "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+        {
+          "line": 23,
+          "message": "\[nit\] trailing whitespace"
+        },
+        {
+          "line": 49,
+          "message": "\[nit\] s/conrtol/control"
+        },
+        {
+          "range": {
+            "start\_line": 50,
+            "start\_character": 0,
+            "end\_line": 55,
+            "end\_character": 20
+          },
+          "message": "Incorrect indentation"
+        }
+      \]
+    }
+  }
+
+As response a [ReviewInfo](#review-info) entity is returned that describes the applied labels.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "labels": {
+      "Code-Review": -1
+    }
+  }
+
+A review cannot be set on a change edit. Trying to post a review for a change edit fails with `409 Conflict`.
+
+It is also possible to add one or more reviewers to a change simultaneously with a review.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/review HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "message": "Looks good to me, but Jane and John should also take a look.",
+    "labels": {
+      "Code-Review": 1
+    },
+    "reviewers": \[
+      {
+        "reviewer": "jane.roe@example.com"
+      },
+      {
+        "reviewer": "john.doe@example.com"
+      }
+    \]
+  }
+
+Each element of the `reviewers` list is an instance of [ReviewerInput](#reviewer-input). The corresponding result of adding each reviewer will be returned in a list of [AddReviewerResult](#add-reviewer-result).
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "labels": {
+      "Code-Review": 1
+    },
+    "reviewers": \[
+      {
+        "input": "jane.roe@example.com",
+        "approvals": {
+          "Verified": " 0",
+          "Code-Review": " 0"
+        },
+        "\_account\_id": 1000097,
+        "name": "Jane Roe",
+        "email": "jane.roe@example.com"
+      },
+      {
+        "input": "john.doe@example.com",
+        "approvals": {
+          "Verified": " 0",
+          "Code-Review": " 0"
+        },
+        "\_account\_id": 1000096,
+        "name": "John Doe",
+        "email": "john.doe@example.com"
+      }
+    \]
+  }
+
+If there are any errors returned for reviewers, the entire review request will be rejected with `400 Bad Request`.
+
+Error Response
+
+  HTTP/1.1 400 Bad Request
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "reviewers": {
+      "MyProjectVerifiers": {
+        "input": "MyProjectVerifiers",
+        "error": "The group My Group has 15 members. Do you want to add them all as reviewers?",
+        "confirm": true
+      }
+    }
+  }
+
+### Rebase Revision
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/rebase'
+
+Rebases a revision.
+
+Optionally, the parent revision can be changed to another patch set through the [RebaseInput](#rebase-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I3ea943139cb62e86071996f2480e58bf3eeb9dd2/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/rebase HTTP/1.0
+  Content-Type: application/json;charset=UTF-8
+
+  {
+    "base" : "1234",
+  }
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the rebased change. Information about the current patch set is included.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I3ea943139cb62e86071996f2480e58bf3eeb9dd2",
+    "project": "myProject",
+    "branch": "master",
+    "change\_id": "I3ea943139cb62e86071996f2480e58bf3eeb9dd2",
+    "subject": "Implement Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": false,
+    "insertions": 21,
+    "deletions": 21,
+    "\_number": 4799,
+    "owner": {
+      "name": "John Doe"
+    },
+    "current\_revision": "27cc4558b5a3d3387dd11ee2df7a117e7e581822",
+    "revisions": {
+      "27cc4558b5a3d3387dd11ee2df7a117e7e581822": {
+        "kind": "REWORK",
+        "\_number": 2,
+        "ref": "refs/changes/99/4799/2",
+        "fetch": {
+          "http": {
+            "url": "http://gerrit:8080/myProject",
+            "ref": "refs/changes/99/4799/2"
+          }
+        },
+        "commit": {
+          "parents": \[
+            {
+              "commit": "b4003890dadd406d80222bf1ad8aca09a4876b70",
+              "subject": "Implement Feature A"
+            }
+        \],
+        "author": {
+          "name": "John Doe",
+          "email": "john.doe@example.com",
+          "date": "2013-05-07 15:21:27.000000000",
+          "tz": 120
+        },
+        "committer": {
+          "name": "Gerrit Code Review",
+          "email": "gerrit-server@example.com",
+          "date": "2013-05-07 15:35:43.000000000",
+          "tz": 120
+        },
+        "subject": "Implement Feature X",
+        "message": "Implement Feature X\\n\\nAdded feature X."
+      }
+    }
+  }
+
+If the revision cannot be rebased, e.g. due to conflicts, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=UTF-8
+
+  The change could not be rebased due to a path conflict during merge.
+
+### Submit Revision
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/submit'
+
+Submits a revision.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/submit HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+As response a [SubmitInfo](#submit-info) entity is returned that describes the status of the submitted change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "status": "MERGED"
+  }
+
+If the revision cannot be submitted, e.g. because the submit rule doesn’t allow submitting the revision or the revision is not the current revision, the response is “409 Conflict” and the error message is contained in the response body.
+
+Response
+
+  HTTP/1.1 409 Conflict
+  Content-Type: text/plain; charset=UTF-8
+
+  "revision 674ac754f91e64a0efb8087e59a176484bd534d1 is not current revision"
+
+### Publish Draft Revision
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/publish'
+
+Publishes a draft revision.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/publish HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Delete Draft Revision
+
+'DELETE /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)'
+
+Deletes a draft revision.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1 HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Get Patch
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/patch'
+
+Gets the formatted patch for one revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/patch HTTP/1.0
+
+The formatted patch is returned as text encoded inside base64:
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=ISO-8859-1
+  X-FYI-Content-Encoding: base64
+  X-FYI-Content-Type: application/mbox
+
+  RnJvbSA3ZGFkY2MxNTNmZGVhMTdhYTg0ZmYzMmE2ZTI0NWRiYjY...
+
+Adding query parameter `zip` (for example `/changes/…​/patch?zip`) returns the patch as a single file inside of a ZIP archive. Clients can expand the ZIP to obtain the plain text patch, avoiding the need for a base64 decoding step. This option implies `download`.
+
+Query parameter `download` (e.g. `/changes/…​/patch?download`) will suggest the browser save the patch as `commitsha1.diff.base64`, for later processing by command line tools.
+
+If the `path` parameter is set, the returned content is a diff of the single file that the path refers to.
+
+### Submit Preview
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/preview\_submit'
+
+Gets a file containing thin bundles of all modified projects if this change was submitted. The bundles are named `${ProjectName}.git`. Each thin bundle contains enough to construct the state in which a project would be in if this change were submitted. The base of the thin bundles are the current target branches, so to make use of this call in a non-racy way, first get the bundles and then fetch all projects contained in the bundle. (This assumes no non-fastforward pushes).
+
+You need to give a parameter '?format=zip' or '?format=tar' to specify the format for the outer container. It is always possible to use tgz, even if tgz is not in the list of allowed archive formats.
+
+To make good use of this call, you would roughly need code as found at:
+
+ $ curl -Lo preview\_submit\_test.sh http://review.example.com:8080/tools/scripts/preview\_submit\_test.sh
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/preview\_submit?zip HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Date: Tue, 13 Sep 2016 19:13:46 GMT
+  Content-Disposition: attachment; filename="submit-preview-147.zip"
+  X-Content-Type-Options: nosniff
+  Cache-Control: no-cache, no-store, max-age=0, must-revalidate
+  Pragma: no-cache
+  Expires: Mon, 01 Jan 1990 00:00:00 GMT
+  Content-Type: application/x-zip
+  Transfer-Encoding: chunked
+
+  \[binary stuff\]
+
+In case of an error, the response is not a zip file but a regular json response, containing only the error message:
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "Anonymous users cannot submit"
+
+### Get Mergeable
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/mergeable'
+
+Gets the method the server will use to submit (merge) the change and an indicator if the change is currently mergeable.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/mergeable HTTP/1.0
+
+As response a [MergeableInfo](#mergeable-info) entity is returned.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    submit\_type: "MERGE\_IF\_NECESSARY",
+    strategy: "recursive",
+    mergeable: true
+  }
+
+If the `other-branches` parameter is specified, the mergeability will also be checked for all other branches which are listed in the [branchOrder](config-project-config.html#branchOrder-section) section in the project.config file.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/mergeable?other-branches HTTP/1.0
+
+The response will then contain a list of all other branches where this changes could merge cleanly.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    submit\_type: "MERGE\_IF\_NECESSARY",
+    mergeable: true,
+    mergeable\_into: \[
+        "refs/heads/stable-2.7",
+        "refs/heads/stable-2.8",
+    \]
+  }
+
+### Get Submit Type
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/submit\_type'
+
+Gets the method the server will use to submit (merge) the change.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/submit\_type HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "MERGE\_IF\_NECESSARY"
+
+### Test Submit Type
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/test.submit\_type'
+
+Tests the submit\_type Prolog rule in the project, or the one given.
+
+Request body may be either the Prolog code as `text/plain` or a [RuleInput](#rule-input) object. The query parameter `filters` may be set to `SKIP` to bypass parent project filters while testing a project-specific rule.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/test.submit\_type HTTP/1.0
+  Content-Type: text/plain; charset-UTF-8
+
+  submit\_type(cherry\_pick).
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  "CHERRY\_PICK"
+
+### Test Submit Rule
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/test.submit\_rule'
+
+Tests the submit\_rule Prolog rule in the project, or the one given.
+
+Request body may be either the Prolog code as `text/plain` or a [RuleInput](#rule-input) object. The query parameter `filters` may be set to `SKIP` to bypass parent project filters while testing a project-specific rule.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/current/test.submit\_rule?filters=SKIP HTTP/1.0
+  Content-Type: text/plain; charset-UTF-8
+
+  submit\_rule(submit(R)) :-
+    R = label('Any-Label-Name', reject(\_)).
+
+The response is a list of [SubmitRecord](#submit-record) entries describing the permutations that satisfy the tested submit rule.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "status": "NOT\_READY",
+      "reject": {
+        "Any-Label-Name": {}
+      }
+    }
+  \]
+
+When testing with the `curl` command line client the `--data-binary @rules.pl` flag should be used to ensure all LFs are included in the Prolog code:
+
+  curl -X POST \\
+    -H 'Content-Type: text/plain; charset=UTF-8' \\
+    --data-binary @rules.pl \\
+    http://.../test.submit\_rule
+
+### List Revision Drafts
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/drafts/'
+
+Lists the draft comments of a revision that belong to the calling user.
+
+Returns a map of file paths to lists of [CommentInfo](#comment-info) entries. The entries in the map are sorted by file path.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/drafts/ HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+      {
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "\[nit\] trailing whitespace",
+        "updated": "2013-02-26 15:40:43.986000000"
+      },
+      {
+        "id": "TveXwFiA",
+        "line": 49,
+        "in\_reply\_to": "TfYX-Iuo",
+        "message": "Done",
+        "updated": "2013-02-26 15:40:45.328000000"
+      }
+    \]
+  }
+
+### Create Draft
+
+'PUT /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/drafts'
+
+Creates a draft comment on a revision.
+
+The new draft comment must be provided in the request body inside a [CommentInput](#comment-input) entity.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/drafts HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "path": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+    "line": 23,
+    "message": "\[nit\] trailing whitespace"
+  }
+
+As response a [CommentInfo](#comment-info) entity is returned that describes the draft comment.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "TvcXrmjM",
+    "path": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+    "line": 23,
+    "message": "\[nit\] trailing whitespace",
+    "updated": "2013-02-26 15:40:43.986000000"
+  }
+
+### Get Draft
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/drafts/[{draft-id}](#draft-id)'
+
+Retrieves a draft comment of a revision that belongs to the calling user.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/drafts/TvcXrmjM HTTP/1.0
+
+As response a [CommentInfo](#comment-info) entity is returned that describes the draft comment.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "TvcXrmjM",
+    "path": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+    "line": 23,
+    "message": "\[nit\] trailing whitespace",
+    "updated": "2013-02-26 15:40:43.986000000"
+  }
+
+### Update Draft
+
+'PUT /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/drafts/[{draft-id}](#draft-id)'
+
+Updates a draft comment on a revision.
+
+The new draft comment must be provided in the request body inside a [CommentInput](#comment-input) entity.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/drafts/TvcXrmjM HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "path": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+    "line": 23,
+    "message": "\[nit\] trailing whitespace"
+  }
+
+As response a [CommentInfo](#comment-info) entity is returned that describes the draft comment.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "TvcXrmjM",
+    "path": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+    "line": 23,
+    "message": "\[nit\] trailing whitespace",
+    "updated": "2013-02-26 15:40:43.986000000"
+  }
+
+### Delete Draft
+
+'DELETE /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/drafts/[{draft-id}](#draft-id)'
+
+Deletes a draft comment from a revision.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/drafts/TvcXrmjM HTTP/1.0
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### List Revision Comments
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/comments/'
+
+Lists the published comments of a revision.
+
+As result a map is returned that maps the file path to a list of [CommentInfo](#comment-info) entries. The entries in the map are sorted by file path and only include file (or inline) comments. Use the [Get Change Detail](#get-change-detail) endpoint to retrieve the general change message (or comment).
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/comments/ HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+      {
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "\[nit\] trailing whitespace",
+        "updated": "2013-02-26 15:40:43.986000000",
+        "author": {
+          "\_account\_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com"
+        }
+      },
+      {
+        "id": "TveXwFiA",
+        "line": 49,
+        "in\_reply\_to": "TfYX-Iuo",
+        "message": "Done",
+        "updated": "2013-02-26 15:40:45.328000000",
+        "author": {
+          "\_account\_id": 1000097,
+          "name": "Jane Roe",
+          "email": "jane.roe@example.com"
+        }
+      }
+    \]
+  }
+
+### Get Comment
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/comments/[{comment-id}](#comment-id)'
+
+Retrieves a published comment of a revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/comments/TvcXrmjM HTTP/1.0
+
+As response a [CommentInfo](#comment-info) entity is returned that describes the published comment.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "TvcXrmjM",
+    "path": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+    "line": 23,
+    "message": "\[nit\] trailing whitespace",
+    "updated": "2013-02-26 15:40:43.986000000",
+    "author": {
+      "\_account\_id": 1000096,
+      "name": "John Doe",
+      "email": "john.doe@example.com"
+    }
+  }
+
+### List Robot Comments
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/robotcomments/'
+
+Lists the [robot comments](config-robot-comments.html) of a revision.
+
+As result a map is returned that maps the file path to a list of [RobotCommentInfo](#robot-comment-info) entries. The entries in the map are sorted by file path.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/robotcomments/ HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": \[
+      {
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "unused import",
+        "updated": "2016-02-26 15:40:43.986000000",
+        "author": {
+          "\_account\_id": 1000110,
+          "name": "Code Analyzer",
+          "email": "code.analyzer@example.com"
+        },
+        "robotId": "importChecker",
+        "robotRunId": "76b1375aa8626ea7149792831fe2ed85e80d9e04"
+      },
+      {
+        "id": "TveXwFiA",
+        "line": 49,
+        "message": "wrong indention",
+        "updated": "2016-02-26 15:40:45.328000000",
+        "author": {
+          "\_account\_id": 1000110,
+          "name": "Code Analyzer",
+          "email": "code.analyzer@example.com"
+        },
+        "robotId": "styleChecker",
+        "robotRunId": "5c606c425dd45184484f9d0a2ffd725a7607839b"
+      }
+    \]
+  }
+
+### Get Robot Comment
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/robotcomments/[{comment-id}](#comment-id)'
+
+Retrieves a [robot comment](config-robot-comments.html) of a revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/robotcomments/TvcXrmjM HTTP/1.0
+
+As response a [RobotCommentInfo](#robot-comment-info) entity is returned that describes the robot comment.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "TvcXrmjM",
+    "line": 23,
+    "message": "unused import",
+    "updated": "2016-02-26 15:40:43.986000000",
+    "author": {
+      "\_account\_id": 1000110,
+      "name": "Code Analyzer",
+      "email": "code.analyzer@example.com"
+    },
+    "robotId": "importChecker",
+    "robotRunId": "76b1375aa8626ea7149792831fe2ed85e80d9e04"
+  }
+
+### List Files
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/'
+
+Lists the files that were modified, added or deleted in a revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/ HTTP/1.0
+
+As result a map is returned that maps the [file path](#file-id) to a [FileInfo](#file-info) entry. The entries in the map are sorted by file path.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "/COMMIT\_MSG": {
+      "status": "A",
+      "lines\_inserted": 7,
+      "size\_delta": 551,
+      "size": 551
+    },
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": {
+      "lines\_inserted": 5,
+      "lines\_deleted": 3,
+      "size\_delta": 98,
+      "size": 23348
+    }
+  }
+
+The request parameter `reviewed` changes the response to return a list of the paths the caller has marked as reviewed. Clients that also need the FileInfo should make two requests.
+
+The request parameter `q` changes the response to return a list of all files (modified or unmodified) that contain that substring in the path name. This is useful to implement suggestion services finding a file by partial name.
+
+The integer-valued request parameter `parent` changes the response to return a list of the files which are different in this commit compared to the given parent commit. This is useful for supporting review of merge commits. The value is the 1-based index of the parent’s position in the commit object.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/?reviewed HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    "/COMMIT\_MSG",
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+  \]
+
+### Get Content
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/[{file-id}](#file-id)/content'
+
+Gets the content of a file from a certain revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/content HTTP/1.0
+
+The content is returned as base64 encoded string. The HTTP response Content-Type is always `text/plain`, reflecting the base64 wrapping. A Gerrit-specific `X-FYI-Content-Type` header is returned describing the server detected content type of the file.
+
+If only the content type is required, callers should use HEAD to avoid downloading the encoded file contents.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: text/plain; charset=ISO-8859-1
+  X-FYI-Content-Encoding: base64
+  X-FYI-Content-Type: text/xml
+
+  Ly8gQ29weXJpZ2h0IChDKSAyMDEwIFRoZSBBbmRyb2lkIE9wZW4gU291cmNlIFByb2plY...
+
+Alternatively, if the only value of the Accept request header is `application/json` the content is returned as JSON string and `X-FYI-Content-Encoding` is set to `json`.
+
+### Download Content
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/[{file-id}](#file-id)/download'
+
+Downloads the content of a file from a certain revision, in a safe format that poses no risk for inadvertent execution of untrusted code.
+
+If the content type is defined as safe, the binary file content is returned verbatim. If the content type is not safe, the file is stored inside a ZIP file, containing a single entry with a random, unpredictable name having the same base and suffix as the true filename. The ZIP file is returned in verbatim binary form.
+
+See [Gerrit config documentation](config-gerrit.html#mimetype.name.safe) for information about safe file type configuration.
+
+The HTTP resource Content-Type is dependent on the file type: the applicable type for safe files, or "application/zip" for unsafe files.
+
+The optional, integer-valued `parent` parameter can be specified to request the named file from a parent commit of the specified revision. The value is the 1-based index of the parent’s position in the commit object. If the parameter is omitted or the value non-positive, the patch set is referenced.
+
+Filenames are decorated with a suffix of `_new` for the current patch, `_old` for the only parent, or `_oldN` for the Nth parent of many.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/website%2Freleases%2Flogo.png/download HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment; filename="logo.png"
+  Content-Type: image/png
+
+  \`\[binary data for logo.png\]\`
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/download?suffix=new HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: Content-Disposition:attachment; filename="RefControl\_new-931cdb73ae9d97eb500a3533455b055d90b99944.java.zip"
+  Content-Type:application/zip
+
+  \`\[binary ZIP archive containing a single file, "RefControl\_new-cb218df1337df48a0e7ab30a49a8067ac7321881.java"\]\`
+
+### Get Diff
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/[{file-id}](#file-id)/diff'
+
+Gets the diff of a file from a certain revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/diff HTTP/1.0
+
+As response a [DiffInfo](#diff-info) entity is returned that describes the diff.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]
+  {
+    "meta\_a": {
+      "name": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "content\_type": "text/x-java-source",
+      "lines": 372
+    },
+    "meta\_b": {
+      "name": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "content\_type": "text/x-java-source",
+      "lines": 578
+    },
+    "change\_type": "MODIFIED",
+    "diff\_header": \[
+      "diff --git a/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java b/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "index 59b7670..9faf81c 100644",
+      "--- a/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "+++ b/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java"
+    \],
+    "content": \[
+      {
+        "ab": \[
+          "// Copyright (C) 2010 The Android Open Source Project",
+          "//",
+          "// Licensed under the Apache License, Version 2.0 (the \\"License\\");",
+          "// you may not use this file except in compliance with the License.",
+          "// You may obtain a copy of the License at",
+          "//",
+          "// http://www.apache.org/licenses/LICENSE-2.0",
+          "//",
+          "// Unless required by applicable law or agreed to in writing, software",
+          "// distributed under the License is distributed on an \\"AS IS\\" BASIS,",
+          "// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
+          "// See the License for the specific language governing permissions and",
+          "// limitations under the License."
+        \]
+      },
+      {
+        "b": \[
+          "//",
+          "// Add some more lines in the header."
+        \]
+      },
+      {
+        "ab": \[
+          "",
+          "package com.google.gerrit.server.project;",
+          "",
+          "import com.google.common.collect.Maps;",
+          ...
+        \]
+      }
+      ...
+    \]
+  }
+
+If the `intraline` parameter is specified, intraline differences are included in the diff.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/b6b9c10649b9041884046119ab794374470a1b45/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/diff?intraline HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]
+  {
+    "meta\_a": {
+      "name": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "content\_type": "text/x-java-source",
+      "lines": 372
+    },
+    "meta\_b": {
+      "name": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "content\_type": "text/x-java-source",
+      "lines": 578
+    },
+    "change\_type": "MODIFIED",
+    "diff\_header": \[
+      "diff --git a/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java b/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "index 59b7670..9faf81c 100644",
+      "--- a/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "+++ b/gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java"
+    \],
+    "content": \[
+      ...
+      {
+        "a": \[
+          "/\*\* Manages access control for Git references (aka branches, tags). \*/"
+        \],
+        "b": \[
+          "/\*\* Manages access control for the Git references (aka branches, tags). \*/"
+        \],
+        "edit\_a": \[\],
+        "edit\_b": \[
+          \[
+            31,
+            4
+          \]
+        \]
+      }
+      \]
+    }
+
+The `base` parameter can be specified to control the base patch set from which the diff should be generated.
+
+The integer-valued request parameter `parent` can be specified to control the parent commit number against which the diff should be generated. This is useful for supporting review of merge commits. The value is the 1-based index of the parent’s position in the commit object.
+
+If the `weblinks-only` parameter is specified, only the diff web links are returned.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/b6b9c10649b9041884046119ab794374470a1b45/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/diff?base=2 HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]
+  {
+    "meta\_a": {
+      "name": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "content\_type": "text/x-java-source",
+      "lines": 578
+    },
+    "meta\_b": {
+      "name": "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java",
+      "content\_type": "text/x-java-source",
+      "lines": 578
+    },
+    "change\_type": "MODIFIED",
+    "content": \[
+      {
+        "skip": 578
+      }
+    \]
+  }
+
+The `whitespace` parameter can be specified to control how whitespace differences are reported in the result. Valid values are `IGNORE_NONE`, `IGNORE_TRAILING`, `IGNORE_LEADING_AND_TRAILING` or `IGNORE_ALL`.
+
+The `context` parameter can be specified to control the number of lines of surrounding context in the diff. Valid values are `ALL` or number of lines.
+
+### Get Blame
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/[{file-id}](#file-id)/blame'
+
+Gets the blame of a file from a certain revision.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/blame HTTP/1.0
+
+As response a [BlameInfo](#blame-info) entity is returned that describes the blame.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]
+  {
+    \[
+      {
+        "author": "Joe Daw",
+        "id": "64e140b4de5883a4dd74d06c2b62ccd7ffd224a7",
+        "time": 1421441349,
+        "commit\_msg": "RST test\\n\\nChange-Id: I11e9e24bd122253f4bb10c36dce825ac2410d646\\n",
+        "ranges": \[
+          {
+            "start": 1,
+            "end": 10
+          },
+          {
+            "start": 16,
+            "end": 296
+          }
+        \]
+      },
+      {
+        "author": "Jane Daw",
+        "id": "8d52621a0e2ac6adec73bd3a49f2371cd53137a7",
+        "time": 1421825421,
+        "commit\_msg": "add banner\\n\\nChange-Id: I2eced9b2691015ae3c5138f4d0c4ca2b8fb15be9\\n",
+        "ranges": \[
+          {
+            "start": 13,
+            "end": 13
+          }
+        \]
+      }
+    \]
+  }
+
+The `base` parameter can be specified to control the base patch set from which the blame should be generated.
+
+### Set Reviewed
+
+'PUT /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/[{file-id}](#file-id)/reviewed'
+
+Marks a file of a revision as reviewed by the calling user.
+
+Request
+
+  PUT /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/reviewed HTTP/1.0
+
+Response
+
+  HTTP/1.1 201 Created
+
+If the file was already marked as reviewed by the calling user the response is “200 OK”.
+
+### Delete Reviewed
+
+'DELETE /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/files/[{file-id}](#file-id)/reviewed'
+
+Deletes the reviewed flag of the calling user from a file of a revision.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/files/gerrit-server%2Fsrc%2Fmain%2Fjava%2Fcom%2Fgoogle%2Fgerrit%2Fserver%2Fproject%2FRefControl.java/reviewed HTTP/1.0
+
+Response
+
+  HTTP/1.1 204 No Content
+
+### Cherry Pick Revision
+
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/cherrypick'
+
+Cherry picks a revision to a destination branch.
+
+The commit message and destination branch must be provided in the request body inside a [CherryPickInput](#cherrypick-input) entity.
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/cherrypick HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "message" : "Implementing Feature X",
+    "destination" : "release-branch"
+  }
+
+As response a [ChangeInfo](#change-info) entity is returned that describes the resulting cherry picked change.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  {
+    "id": "myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9941",
+    "project": "myProject",
+    "branch": "release-branch",
+    "change\_id": "I8473b95934b5732ac55d26311a706c9c2bde9941",
+    "subject": "Implementing Feature X",
+    "status": "NEW",
+    "created": "2013-02-01 09:59:32.126000000",
+    "updated": "2013-02-21 11:16:36.775000000",
+    "mergeable": true,
+    "insertions": 12,
+    "deletions": 11,
+    "\_number": 3965,
+    "owner": {
+      "name": "John Doe"
+    }
+  }
+
+## Revision Reviewer Endpoints
+
+### List Revision Reviewers
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/reviewers/'
+
+Lists the reviewers of a revision.
+
+Please note that only the current revision is supported.
+
+As result a list of [ReviewerInfo](#reviewer-info) entries is returned.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/reviewers/ HTTP/1.0
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json; charset=UTF-8
+
+  )\]}'
+  \[
+    {
+      "approvals": {
+        "Verified": "+1",
+        "Code-Review": "+2"
+      },
+      "\_account\_id": 1000096,
+      "name": "John Doe",
+      "email": "john.doe@example.com"
+    },
+    {
+      "approvals": {
+        "Verified": " 0",
+        "Code-Review": "-1"
+      },
+      "\_account\_id": 1000097,
+      "name": "Jane Roe",
+      "email": "jane.roe@example.com"
+    }
+  \]
+
+### List Revision Votes
+
+'GET /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id)/reviewers/[{account-id}](rest-api-accounts.html#account-id)/votes/'
+
+Lists the votes for a specific reviewer of the revision.
+
+Please note that only the current revision is supported.
+
+Request
+
+  GET /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/reviewers/John%20Doe/votes/ HTTP/1.0
+
+As result a map is returned that maps the label name to the label value. The entries in the map are sorted by label name.
+
+Response
+
+  HTTP/1.1 200 OK
+  Content-Disposition: attachment
+  Content-Type: application/json;charset=UTF-8
+
+  )\]}'
+  {
+    "Code-Review": -1,
+    "Verified": 1,
+    "Work-In-Progress": 1
+  }
+
+### Delete Revision Vote
+
+'DELETE /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id) /reviewers/[{account-id}](rest-api-accounts.html#account-id)/votes/[{label-id}](#label-id)'
+'POST /changes/[{change-id}](#change-id)/revisions/[{revision-id}](#revision-id) /reviewers/[{account-id}](rest-api-accounts.html#account-id)/votes/[{label-id}](#label-id)/delete'
+
+Deletes a single vote from a revision. The deletion will be possible only if the revision is the current revision. By using this endpoint you can prevent deleting the vote (with same label) from a newer patch set by mistake.
+
+Note, that even when the last vote of a reviewer is removed the reviewer itself is still listed on the change.
+
+Options can be provided in the request body as a [DeleteVoteInput](#delete-vote-input) entity.
+
+Request
+
+  DELETE /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/reviewers/John%20Doe/votes/Code-Review HTTP/1.0
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/reviewers/John%20Doe/votes/Code-Review/delete HTTP/1.0
+
+Please note that some proxies prohibit request bodies for DELETE requests. In this case, if you want to specify options, use a POST request:
+
+Request
+
+  POST /changes/myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940/revisions/674ac754f91e64a0efb8087e59a176484bd534d1/reviewers/John%20Doe/votes/Code-Review/delete HTTP/1.0
+  Content-Type: application/json; charset=UTF-8
+
+  {
+    "notify": "NONE"
+  }
+
+Response
+
+  HTTP/1.1 204 No Content
+
+IDs
+---
+
+### [{account-id}](rest-api-accounts.html#account-id)
+
+### {change-id}
+
+Identifier that uniquely identifies one change.
+
+This can be:
+
+*   an ID of the change in the format "'<project>~<branch>~<Change-Id>'", where for the branch the `refs/heads/` prefix can be omitted ("myProject~master~I8473b95934b5732ac55d26311a706c9c2bde9940")
+
+*   a Change-Id if it uniquely identifies one change ("I8473b95934b5732ac55d26311a706c9c2bde9940")
+
+*   a legacy numeric change ID ("4247")
+
+
+### {comment-id}
+
+UUID of a published comment.
+
+### {draft-id}
+
+UUID of a draft comment.
+
+### {label-id}
+
+The name of the label.
+
+### {file-id}
+
+The path of the file.
+
+The following magic paths are supported:
+
+*   `/COMMIT_MSG`:
+
+    The commit message and headers with the parent commit(s), the author information and the committer information.
+
+*   `/MERGE_LIST` (for merge commits only):
+
+    The list of commits that are being integrated into the destination branch by submitting the merge commit.
+
+
+### {fix-id}
+
+UUID of a suggested fix.
+
+### {revision-id}
+
+Identifier that uniquely identifies one revision of a change.
+
+This can be:
+
+*   the literal `current` to name the current patch set/revision
+
+*   a commit ID ("674ac754f91e64a0efb8087e59a176484bd534d1")
+
+*   an abbreviated commit ID that uniquely identifies one revision of the change ("674ac754"), at least 4 digits are required
+
+*   a legacy numeric patch number ("1" for first patch set of the change)
+
+*   "0" or the literal `edit` for a change edit
+
+
+## JSON Entities
+
+### AbandonInput
+
+The `AbandonInput` entity contains information for abandoning a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| (optional) Message to be added as review comment to the change when abandoning the change.|
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the change is abandoned.| Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### ActionInfo
+
+The `ActionInfo` entity describes a REST API call the client can make to manipulate a resource. These are frequently implemented by plugins and may be discovered at runtime.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`method`| (optional) HTTP method to use with the action. Most actions use `POST`, `PUT` or `DELETE` to cause state changes.|
+|`label`| (optional) Short title to display to a user describing the action. In the Gerrit web interface the label is used as the text on the button presented in the UI.|
+|`title`| (optional) Longer text to display describing the action. In a web UI this should be the title attribute of the element, displaying when the user hovers the mouse.|
+|`enabled`| (optional) If true the action is permitted at this time and the caller is likely allowed to execute it. This may change if state is updated at the server or permissions are modified. Not present if false.|
+### AddReviewerResult
+
+The `AddReviewerResult` entity describes the result of adding a reviewer to a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`input`| Value of the `reviewer` field from [ReviewerInput](#reviewer-input) set while adding the reviewer.|
+|`reviewers`| (optional) The newly added reviewers as a list of [ReviewerInfo](#reviewer-info) entities.|
+|`ccs`| (optional) The newly CCed accounts as a list of [ReviewerInfo](#reviewer-info) entities. This field will only appear if the requested `state` for the reviewer was `CC` **and** NoteDb is enabled on the server.|
+|`error`| (optional) Error message explaining why the reviewer could not be added.| If a group was specified in the input and an error is returned, it means that none of the members were added as reviewer.
+
+|`confirm`| `false` if not set|
+Whether adding the reviewer requires confirmation.
+
+### ApprovalInfo
+
+The `ApprovalInfo` entity contains information about an approval from a user for a label on a change.
+
+`ApprovalInfo` has the same fields as [AccountInfo](rest-api-accounts.html#account-info). In addition `ApprovalInfo` has the following fields:
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`value`| (optional) The vote that the user has given for the label. If present and zero, the user is permitted to vote on the label. If absent, the user is not permitted to vote on that label.|
+|`permitted_voting_range`| (optional) The [VotingRangeInfo](#voting-range-info) the user is authorized to vote on that label. If present, the user is permitted to vote on the label regarding the range values. If absent, the user is not permitted to vote on that label.|
+|`date`| (optional) The time and date describing when the approval was made.|
+|`tag`| (optional) Value of the `tag` field from [ReviewInput](#review-input) set while posting the review. NOTE: To apply different tags on on different votes/comments multiple invocations of the REST call are required.|
+|`post_submit`| not set if `false`|
+If true, this vote was made after the change was submitted.
+
+### AssigneeInput
+
+The `AssigneeInput` entity contains the identity of the user to be set as assignee.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`assignee`| The [ID](rest-api-accounts.html#account-id) of one account that should be added as assignee.|
+### BlameInfo
+
+The `BlameInfo` entity stores the commit metadata with the row coordinates where it applies.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`author`| The author of the commit.|
+|`id`| The id of the commit.|
+|`time`| Commit time.|
+|`commit_msg`| The commit message.|
+|`ranges`| The blame row coordinates as [RangeInfo](#range-info) entities.|
+### ChangeEditInput
+
+The `ChangeEditInput` entity contains information for restoring a path within change edit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`restore_path`| (optional) Path to file to restore.|
+|`old_path`| (optional) Old path to file to rename.|
+|`new_path`| (optional) New path to file to rename.|
+### ChangeEditMessageInput
+
+The `ChangeEditMessageInput` entity contains information for changing the commit message within a change edit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| New commit message.|
+### ChangeInfo
+
+The `ChangeInfo` entity contains information about a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`id`| The ID of the change in the format "'<project>~<branch>~<Change-Id>'", where 'project', 'branch' and 'Change-Id' are URL encoded. For 'branch' the `refs/heads/` prefix is omitted.|
+|`project`| The name of the project.|
+|`branch`| The name of the target branch.| The `refs/heads/` prefix is omitted.
+
+|`topic`| (optional) The topic to which this change belongs.|
+|`change_id`| The Change-Id of the change.|
+|`subject`| The subject of the change (header line of the commit message).|
+|`status`| The status of the change (`NEW`, `MERGED`, `ABANDONED`, `DRAFT`).|
+|`created`| The [timestamp](rest-api.html#timestamp) of when the change was created.|
+|`updated`| The [timestamp](rest-api.html#timestamp) of when the change was last updated.|
+|`submitted`| only set for merged changes|
+The [timestamp](rest-api.html#timestamp) of when the change was submitted.
+
+|`starred`| not set if `false`|
+Whether the calling user has starred this change with the default label.
+
+|`stars`| (optional) A list of star labels that are applied by the calling user to this change. The labels are lexicographically sorted.|
+|`reviewed`| not set if `false`|
+Whether the change was reviewed by the calling user. Only set if [reviewed](#reviewed) is requested.
+
+|`submit_type`| (optional) The [submit type](project-configuration.html#submit_type) of the change.| Not set for merged changes.
+
+|`mergeable`| (optional) Whether the change is mergeable.| Not set for merged changes, or if the change has not yet been tested.
+
+|`submittable`| (optional) Whether the change has been approved by the project submit rules.| Only set if [requested](#submittable).
+
+|`insertions`| Number of inserted lines.|
+|`deletions`| Number of deleted lines.|
+|`unresolved_comment_count`| (optional) Number of unresolved comments. Not set if the current change index doesn’t have the data.|
+|`_number`| The legacy numeric ID of the change.|
+|`owner`| The owner of the change as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`actions`| (optional) Actions the caller might be able to perform on this revision. The information is a map of view name to [ActionInfo](#action-info) entities.|
+|`labels`| (optional) The labels of the change as a map that maps the label names to [LabelInfo](#label-info) entries.| Only set if [labels](#labels) or [detailed labels](#detailed-labels) are requested.
+
+|`permitted_labels`| (optional) A map of the permitted labels that maps a label name to the list of values that are allowed for that label.| Only set if [detailed labels](#detailed-labels) are requested.
+
+|`removable_reviewers`| (optional) The reviewers that can be removed by the calling user as a list of [AccountInfo](rest-api-accounts.html#account-info) entities.| Only set if [detailed labels](#detailed-labels) are requested.
+
+|`reviewers`| The reviewers as a map that maps a reviewer state to a list of [AccountInfo](rest-api-accounts.html#account-info) entities. Possible reviewer states are `REVIEWER`, `CC` and `REMOVED`.| `REVIEWER`: Users with at least one non-zero vote on the change.
+`CC`: Users that were added to the change, but have not voted.
+`REMOVED`: Users that were previously reviewers on the change, but have been removed.
+Only set if [detailed labels](#detailed-labels) are requested.
+
+|`reviewer_updates`| (optional) Updates to reviewers set for the change as [ReviewerUpdateInfo](#review-update-info) entities. Only set if [reviewer updates](#reviewer-updates) are requested and if NoteDb is enabled.|
+|`messages`| (optional) Messages associated with the change as a list of [ChangeMessageInfo](#change-message-info) entities.| Only set if [messages](#messages) are requested.
+
+|`current_revision`| (optional) The commit ID of the current patch set of this change.| Only set if [the current revision](#current-revision) is requested or if [all revisions](#all-revisions) are requested.
+
+|`revisions`| (optional) All patch sets of this change as a map that maps the commit ID of the patch set to a [RevisionInfo](#revision-info) entity.| Only set if [the current revision](#current-revision) is requested (in which case it will only contain a key for the current revision) or if [all revisions](#all-revisions) are requested.
+
+|`_more_changes`| optional, not set if `false`|
+Whether the query would deliver more results if not limited.
+Only set on the last change that is returned.
+
+|`problems`| (optional) A list of [ProblemInfo](#problem-info) entities describing potential problems with this change. Only set if [CHECK](#check) is set.|
+### ChangeInput
+
+The `ChangeInput` entity contains information about creating a new change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`project`| The name of the project.|
+|`branch`| The name of the target branch.| The `refs/heads/` prefix is omitted.
+
+|`subject`| The commit message of the change. Comment lines (beginning with `#`) will be removed.|
+|`topic`| (optional) The topic to which this change belongs.|
+|`status`| optional, default to `NEW`|
+The status of the change (only `NEW` and `DRAFT` accepted here).
+
+|`base_change`| (optional) A [{change-id}](#change-id) that identifies the base change for a create change operation.|
+|`new_branch`| optional, default to `false`|
+Allow creating a new branch when set to `true`.
+
+|`merge`| (optional) The detail of a merge commit as a [MergeInput](#merge-input) entity.|
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the change is created.| Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the change creation as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### ChangeMessageInfo
+
+The `ChangeMessageInfo` entity contains information about a message attached to a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`id`| The ID of the message.|
+|`author`| (optional) Author of the message as an [AccountInfo](rest-api-accounts.html#account-info) entity.| Unset if written by the Gerrit system.
+
+|`date`| The [timestamp](rest-api.html#timestamp) this message was posted.|
+|`message`| The text left by the user.|
+|`tag`| (optional) Value of the `tag` field from [ReviewInput](#review-input) set while posting the review. NOTE: To apply different tags on on different votes/comments multiple invocations of the REST call are required.|
+|`_revision_number`| (optional) Which patchset (if any) generated this message.|
+### CherryPickInput
+
+The `CherryPickInput` entity contains information for cherry-picking a change to a new branch.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| Commit message for the cherry-picked change|
+|`destination`| Destination branch|
+|`parent`| optional, defaults to 1|
+Number of the parent relative to which the cherry-pick should be considered.
+
+### CommentInfo
+
+The `CommentInfo` entity contains information about an inline comment.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`patch_set`| (optional) The patch set number for the comment; only set in contexts where| comments may be returned for multiple patch sets.
+
+|`id`| The URL encoded UUID of the comment.|
+|`path`| (optional) The path of the file for which the inline comment was done.| Not set if returned in a map where the key is the file path.
+
+|`side`| (optional) The side on which the comment was added.| Allowed values are `REVISION` and `PARENT`.
+If not set, the default is `REVISION`.
+
+|`parent`| (optional) The 1-based parent number. Used only for merge commits when `side == PARENT`. When not set the comment is for the auto-merge tree.|
+|`line`| (optional) The number of the line for which the comment was done.| If range is set, this equals the end line of the range.
+If neither line nor range is set, it’s a file comment.
+
+|`range`| (optional) The range of the comment as a [CommentRange](#comment-range) entity.|
+|`in_reply_to`| (optional) The URL encoded UUID of the comment to which this comment is a reply.|
+|`message`| (optional) The comment message.|
+|`updated`| The [timestamp](rest-api.html#timestamp) of when this comment was written.|
+|`author`| (optional) The author of the message as an [AccountInfo](rest-api-accounts.html#account-info) entity.| Unset for draft comments, assumed to be the calling user.
+
+|`tag`| (optional) Value of the `tag` field from [ReviewInput](#review-input) set while posting the review. NOTE: To apply different tags on on different votes/comments multiple invocations of the REST call are required.|
+|`unresolved`| (optional) Whether or not the comment must be addressed by the user. The state of resolution of a comment thread is stored in the last comment in that thread chronologically.|
+### CommentInput
+
+The `CommentInput` entity contains information for creating an inline comment.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`id`| (optional) The URL encoded UUID of the comment if an existing draft comment should be updated.|
+|`path`| (optional) The path of the file for which the inline comment should be added.| Doesn’t need to be set if contained in a map where the key is the file path.
+
+|`side`| (optional) The side on which the comment should be added.| Allowed values are `REVISION` and `PARENT`.
+If not set, the default is `REVISION`.
+
+|`line`| (optional) The number of the line for which the comment should be added.| `0` if it is a file comment.
+If neither line nor range is set, a file comment is added.
+If range is set, this value is ignored in favor of the `end_line` of the range.
+
+|`range`| (optional) The range of the comment as a [CommentRange](#comment-range) entity.|
+|`in_reply_to`| (optional) The URL encoded UUID of the comment to which this comment is a reply.|
+|`updated`| (optional) The [timestamp](rest-api.html#timestamp) of this comment.| Accepted but ignored.
+
+|`message`| (optional) The comment message.| If not set and an existing draft comment is updated, the existing draft comment is deleted.
+
+|`tag`| optional, drafts only|
+Value of the `tag` field. Only allowed on [draft comment](#create-draft)
+inputs; for published comments, use the `tag` field in
+link#review-input\[ReviewInput\]
+
+|`unresolved`| (optional) Whether or not the comment must be addressed by the user. This value will default to false if the comment is an orphan, or the value of the `in_reply_to` comment if it is supplied.|
+### CommentRange
+
+The `CommentRange` entity describes the range of an inline comment.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`start_line`| The start line number of the range. (1-based, inclusive)|
+|`start_character`| The character position in the start line. (0-based, inclusive)|
+|`end_line`| The end line number of the range. (1-based, exclusive)|
+|`end_character`| The character position in the end line. (0-based, exclusive)|
+### CommitInfo
+
+The `CommitInfo` entity contains information about a commit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`commit`| Optional|
+The commit ID. Not set if included in a [RevisionInfo](#revision-info) entity that is contained in a map which has the commit ID as key.
+
+|`parents`| The parent commits of this commit as a list of [CommitInfo](#commit-info) entities. In each parent only the `commit` and `subject` fields are populated.|
+|`author`| The author of the commit as a [GitPersonInfo](#git-person-info) entity.|
+|`committer`| The committer of the commit as a [GitPersonInfo](#git-person-info) entity.|
+|`subject`| The subject of the commit (header line of the commit message).|
+|`message`| The commit message.|
+|`web_links`| (optional) Links to the commit in external sites as a list of [WebLinkInfo](#web-link-info) entities.|
+### DeleteReviewerInput
+
+The `DeleteReviewerInput` entity contains options for the deletion of a reviewer.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the reviewer is deleted.| Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### DeleteVoteInput
+
+The `DeleteVoteInput` entity contains options for the deletion of a vote.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`label`| (optional) The label for which the vote should be deleted.| If set, must match the label in the URL.
+
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the vote is deleted.| Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### DescriptionInput
+
+The `DescriptionInput` entity contains information for setting a description.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`description`| The description text.|
+### DiffContent
+
+The `DiffContent` entity contains information about the content differences in a file.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`a`| (optional) Content only in the file on side A (deleted in B).|
+|`b`| (optional) Content only in the file on side B (added in B).|
+|`ab`| (optional) Content in the file on both sides (unchanged).|
+|`edit_a`| only present during a replace, i.e. both `a` and `b` are present|
+Text sections deleted from side A as a [DiffIntralineInfo](#diff-intraline-info) entity.
+
+|`edit_b`| only present during a replace, i.e. both `a` and `b` are present|
+Text sections inserted in side B as a [DiffIntralineInfo](#diff-intraline-info) entity.
+
+|`skip`| (optional) count of lines skipped on both sides when the file is too large to include all common lines.|
+|`common`| (optional) Set to `true` if the region is common according to the requested ignore-whitespace parameter, but a and b contain differing amounts of whitespace. When present and true a and b are used instead of ab.|
+### DiffFileMetaInfo
+
+The `DiffFileMetaInfo` entity contains meta information about a file diff.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`name`| The name of the file.|
+|`content_type`| The content type of the file.|
+|`lines`| The total number of lines in the file.|
+|`web_links`| (optional) Links to the file in external sites as a list of [WebLinkInfo](rest-api-changes.html#web-link-info) entries.|
+### DiffInfo
+
+The `DiffInfo` entity contains information about the diff of a file in a revision.
+
+If the [weblinks-only](#weblinks-only) parameter is specified, only the `web_links` field is set.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`meta_a`| not present when the file is added|
+Meta information about the file on side A as a [DiffFileMetaInfo](#diff-file-meta-info) entity.
+
+|`meta_b`| not present when the file is deleted|
+Meta information about the file on side B as a [DiffFileMetaInfo](#diff-file-meta-info) entity.
+
+|`change_type`| The type of change (`ADDED`, `MODIFIED`, `DELETED`, `RENAMED` `COPIED`, `REWRITE`).|
+|`intraline_status`| only set when the `intraline` parameter was specified in the request|
+Intraline status (`OK`, `ERROR`, `TIMEOUT`).
+
+|`diff_header`| A list of strings representing the patch set diff header.|
+|`content`| The content differences in the file as a list of [DiffContent](#diff-content) entities.|
+|`web_links`| (optional) Links to the file diff in external sites as a list of [DiffWebLinkInfo](rest-api-changes.html#diff-web-link-info) entries.|
+|`binary`| not set if `false`|
+Whether the file is binary.
+
+### DiffIntralineInfo
+
+The `DiffIntralineInfo` entity contains information about intraline edits in a file.
+
+The information consists of a list of `<skip length, mark length>` pairs, where the skip length is the number of characters between the end of the previous edit and the start of this edit, and the mark length is the number of edited characters following the skip. The start of the edits is from the beginning of the related diff content lines.
+
+Note that the implied newline character at the end of each line is included in the length calculation, and thus it is possible for the edits to span newlines.
+
+### DiffWebLinkInfo
+
+The `DiffWebLinkInfo` entity describes a link on a diff screen to an external site.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`name`| The link name.|
+|`url`| The link URL.|
+|`image_url`| URL to the icon of the link.|
+show\_on\_side\_by\_side\_diff\_view
+
+Whether the web link should be shown on the side-by-side diff screen.
+
+show\_on\_unified\_diff\_view
+
+Whether the web link should be shown on the unified diff screen.
+
+### EditFileInfo
+
+The `EditFileInfo` entity contains additional information of a file within a change edit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`web_links`| (optional) Links to the diff info in external sites as a list of [WebLinkInfo](#web-link-info) entities.|
+### EditInfo
+
+The `EditInfo` entity contains information about a change edit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`commit`| The commit of change edit as [CommitInfo](#commit-info) entity.|
+|`base_revision`| The revision of the patch set the change edit is based on.|
+|`fetch`| Information about how to fetch this patch set. The fetch information is provided as a map that maps the protocol name (“git”, “http”, “ssh”) to [FetchInfo](#fetch-info) entities.|
+|`files`| (optional) The files of the change edit as a map that maps the file names to [FileInfo](#file-info) entities.|
+### FetchInfo
+
+The `FetchInfo` entity contains information about how to fetch a patch set via a certain protocol.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`url`| The URL of the project.|
+|`ref`| The ref of the patch set.|
+|`commands`| (optional) The download commands for this patch set as a map that maps the command names to the commands.| Only set if [download commands](#download-commands) are requested.
+
+### FileInfo
+
+The `FileInfo` entity contains information about a file in a patch set.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`status`| (optional) The status of the file (“A”=Added, “D”=Deleted, “R”=Renamed, “C”=Copied, “W”=Rewritten).| Not set if the file was Modified (“M”).
+
+|`binary`| not set if `false`|
+Whether the file is binary.
+
+|`old_path`| (optional) The old file path.| Only set if the file was renamed or copied.
+
+|`lines_inserted`| (optional) Number of inserted lines.| Not set for binary files or if no lines were inserted.
+
+|`lines_deleted`| (optional) Number of deleted lines.| Not set for binary files or if no lines were deleted.
+
+|`size_delta`| Number of bytes by which the file size increased/decreased.|
+|`size`| File size in bytes.|
+### FixInput
+
+The `FixInput` entity contains options for fixing commits using the [fix change](#fix-change) endpoint.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`delete_patch_set_if_commit_missing`| If true, delete patch sets from the database if they refer to missing commit options.|
+|`expect_merged_as`| If set, check that the change is merged into the destination branch as this exact SHA-1. If not, insert a new patch set referring to this commit.|
+### FixSuggestionInfo
+
+The `FixSuggestionInfo` entity represents a suggested fix.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`fix_id`| generated, don’t set|
+The [UUID](#fix-id) of the suggested fix. It will be generated automatically and hence will be ignored if it’s set for input objects.
+
+|`description`| A description of the suggested fix.|
+|`replacements`| A list of [FixReplacementInfo](#fix-replacement-info) entities indicating how the content of the file on which the comment was placed should be modified. They should refer to non-overlapping regions.|
+### FixReplacementInfo
+
+The `FixReplacementInfo` entity describes how the content of a file should be replaced by another content.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`path`| The path of the file which should be modified. Modifications are only allowed for the file on which the corresponding comment was placed.|
+|`range`| A [CommentRange](#comment-range) indicating which content of the file should be replaced.|
+|`replacement`| The content which should be used instead of the current one.|
+### GitPersonInfo
+
+The `GitPersonInfo` entity contains information about the author/committer of a commit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`name`| The name of the author/committer.|
+|`email`| The email address of the author/committer.|
+|`date`| The [timestamp](rest-api.html#timestamp) of when this identity was constructed.|
+|`tz`| The timezone offset from UTC of when this identity was constructed.|
+### GroupBaseInfo
+
+The `GroupBaseInfo` entity contains base information about the group.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`id`| The UUID of the group.|
+|`name`| The name of the group.|
+### HashtagsInput
+
+The `HashtagsInput` entity contains information about hashtags to add to, and/or remove from, a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`add`| (optional) The list of hashtags to be added to the change.|
+\`remove
+
+(optional) The list of hashtags to be removed from the change.
+
+### IncludedInInfo
+
+The `IncludedInInfo` entity contains information about the branches a change was merged into and tags it was tagged with.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`branches`| The list of branches this change was merged into. Each branch is listed without the 'refs/head/' prefix.|
+|`tags`| The list of tags this change was tagged with. Each tag is listed without the 'refs/tags/' prefix.|
+|`external`| (optional) A map that maps a name to a list of external systems that include this change, e.g. a list of servers on which this change is deployed.|
+### LabelInfo
+
+The `LabelInfo` entity contains information about a label on a change, always corresponding to the current patch set.
+
+There are two options that control the contents of `LabelInfo`: [`LABELS`](#labels) and [`DETAILED_LABELS`](#detailed-labels).
+
+*   For a quick summary of the state of labels, use `LABELS`.
+
+*   For detailed information about labels, including exact numeric votes for all users and the allowed range of votes for the current user, use `DETAILED_LABELS`.
+
+
+#### Common fields
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`optional`| not set if `false`|
+Whether the label is optional. Optional means the label may be set, but it’s neither necessary for submission nor does it block submission if set.
+
+#### Fields set by `LABELS`
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`approved`| (optional) One user who approved this label on the change (voted the maximum value) as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`rejected`| (optional) One user who rejected this label on the change (voted the minimum value) as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`recommended`| (optional) One user who recommended this label on the change (voted positively, but not the maximum value) as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`disliked`| (optional) One user who disliked this label on the change (voted negatively, but not the minimum value) as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`blocking`| (optional) If `true`, the label blocks submit operation. If not set, the default is false.|
+|`value`| (optional) The voting value of the user who recommended/disliked this label on the change if it is not “+1”/“-1”.|
+|`default_value`| (optional) The default voting value for the label. This value may be outside the range specified in permitted\_labels.|
+#### Fields set by `DETAILED_LABELS`
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`all`| (optional) List of all approvals for this label as a list of [ApprovalInfo](#approval-info) entities.|
+|`values`| (optional) A map of all values that are allowed for this label. The map maps the values (“-2”, “-1”, " \`0\`", “+1”, “+2”) to the value descriptions.|
+### MergeableInfo
+
+The `MergeableInfo` entity contains information about the mergeability of a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`submit_type`| Submit type used for this change, can be `MERGE_IF_NECESSARY`, `FAST_FORWARD_ONLY`, `REBASE_IF_NECESSARY`, `REBASE_ALWAYS`, `MERGE_ALWAYS` or `CHERRY_PICK`.|
+|`strategy`| (optional) The strategy of the merge, can be `recursive`, `resolve`, `simple-two-way-in-core`, `ours` or `theirs`.|
+|`mergeable`| `true` if this change is cleanly mergeable, `false` otherwise|
+|`commit_merged`| (optional) `true` if this change is already merged, `false` otherwise|
+|`content_merged`| (optional) `true` if the content of this change is already merged, `false` otherwise|
+|`conflicts`| (optional) A list of paths with conflicts|
+|`mergeable_into`| (optional) A list of other branch names where this change could merge cleanly|
+### MergeInput
+
+The `MergeInput` entity contains information about the merge
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`source`| The source to merge from, e.g. a complete or abbreviated commit SHA-1, a complete reference name, a short reference name under `refs/heads`, `refs/tags`, or `refs/remotes` namespace, etc.|
+|`strategy`| (optional) The strategy of the merge, can be `recursive`, `resolve`, `simple-two-way-in-core`, `ours` or `theirs`, default will use project settings.|
+### MergePatchSetInput
+
+The `MergePatchSetInput` entity contains information about updating a new change by creating a new merge commit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`subject`| (optional) The new subject for the change, if not specified, will reuse the current patch set’s subject|
+|`inheritParent`| optional, default to `false`|
+Use the current patch set’s first parent as the merge tip when set to `true`. Otherwise, use the current branch tip of the destination branch.
+
+|`merge`| The detail of the source commit for merge as a [MergeInput](#merge-input) entity.|
+### MoveInput
+
+The `MoveInput` entity contains information for moving a change to a new branch.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`destination_branch`| Destination branch|
+|`message`| (optional) A message to be posted in this change’s comments|
+### NotifyInfo
+
+The `NotifyInfo` entity contains detailed information about who should be notified about an update. These notifications are sent out even if a `notify` option in the request input disables normal notifications. `NotifyInfo` entities are normally contained in a `notify_details` map in the request input where the key is the recipient type. The recipient type can be `TO`, `CC` and `BCC`.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`accounts`| (optional) A list of [account IDs](rest-api-accounts.html#account-id) that identify the accounts that should be should be notified.|
+### ProblemInfo
+
+The `ProblemInfo` entity contains a description of a potential consistency problem with a change. These are not related to the code review process, but rather indicate some inconsistency in Gerrit’s database or repository metadata related to the enclosing change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| Plaintext message describing the problem with the change.|
+|`status`| (optional) The status of fixing the problem (`FIXED`, `FIX_FAILED`). Only set if a fix was attempted.|
+|`outcome`| (optional) If `status` is set, an additional plaintext message describing the outcome of the fix.|
+### PublishChangeEditInput
+
+The `PublishChangeEditInput` entity contains options for the publishing of change edit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the change edit is published.| Allowed values are `NONE` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### PushCertificateInfo
+
+The `PushCertificateInfo` entity contains information about a push certificate provided when the user pushed for review with `git push --signed HEAD:refs/for/<branch>`. Only used when signed push is [enabled](config-gerrit.html#receive.enableSignedPush) on the server.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`certificate`| Signed certificate payload and GPG signature block.|
+|`key`| Information about the key that signed the push, along with any problems found while checking the signature or the key itself, as a [GpgKeyInfo](rest-api-accounts.html#gpg-key-info) entity.|
+### RangeInfo
+
+The `RangeInfo` entity stores the coordinates of a range.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`start`| First index.|
+|`end`| Last index.|
+### RebaseInput
+
+The `RebaseInput` entity contains information for changing parent when rebasing.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`base`| (optional) The new parent revision. This can be a ref or a SHA1 to a concrete patchset.| Alternatively, a change number can be specified, in which case the current patch set is inferred.
+Empty string is used for rebasing directly on top of the target branch, which effectively breaks dependency towards a parent change.
+
+### RelatedChangeAndCommitInfo
+
+The `RelatedChangeAndCommitInfo` entity contains information about a related change and commit.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`change_id`| (optional) The Change-Id of the change.|
+|`commit`| The commit as a [CommitInfo](#commit-info) entity.|
+|`_change_number`| (optional) The change number.|
+|`_revision_number`| (optional) The revision number.|
+|`_current_revision_number`| (optional) The current revision number.|
+|`status`| (optional) The status of the change. The status of the change is one of (`NEW`, `MERGED`, `ABANDONED`, `DRAFT`).|
+### RelatedChangesInfo
+
+The `RelatedChangesInfo` entity contains information about related changes.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`changes`| A list of [RelatedChangeAndCommitInfo](#related-change-and-commit-info) entities describing the related changes. Sorted by git commit order, newest to oldest. Empty if there are no related changes.|
+### RestoreInput
+
+The `RestoreInput` entity contains information for restoring a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| (optional) Message to be added as review comment to the change when restoring the change.|
+### RevertInput
+
+The `RevertInput` entity contains information for reverting a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| (optional) Message to be added as review comment to the change when reverting the change.|
+### ReviewInfo
+
+The `ReviewInfo` entity contains information about a review.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`labels`| The labels of the review as a map that maps the label names to the voting values.|
+### ReviewerUpdateInfo
+
+The `ReviewerUpdateInfo` entity contains information about updates to change’s reviewers set.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`updated`| Timestamp of the update.|
+|`updated_by`| The account which modified state of the reviewer in question as [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`reviewer`| The reviewer account added or removed from the change as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`state`| The reviewer state, one of `REVIEWER`, `CC` or `REMOVED`.|
+### ReviewInput
+
+The `ReviewInput` entity contains information for adding a review to a revision.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`message`| (optional) The message to be added as review comment.|
+|`tag`| (optional) Apply this tag to the review comment message, votes, and inline comments. Tags may be used by CI or other automated systems to distinguish them from human reviews. Comments with specific tag values can be filtered out in the web UI.|
+|`labels`| (optional) The votes that should be added to the revision as a map that maps the label names to the voting values.|
+|`comments`| (optional) The comments that should be added as a map that maps a file path to a list of [CommentInput](#comment-input) entities.|
+|`robot_comments`| (optional) The robot comments that should be added as a map that maps a file path to a list of [RobotCommentInput](#robot-comment-input) entities.|
+|`strict_labels`| `true` if not set|
+Whether all labels are required to be within the user’s permitted ranges based on access controls.
+If `true`, attempting to use a label not granted to the user will fail the entire modify operation early.
+If `false`, the operation will execute anyway, but the proposed labels will be modified to be the "best" value allowed by the access controls.
+
+|`drafts`| (optional) Draft handling that defines how draft comments are handled that are already in the database but that were not also described in this input.| Allowed values are `DELETE`, `PUBLISH`, `PUBLISH_ALL_REVISIONS` and `KEEP`. All values except `PUBLISH_ALL_REVISIONS` operate only on drafts for a single revision.
+Only `KEEP` is allowed when used in conjunction with `on_behalf_of`.
+If not set, the default is `DELETE`, unless `on_behalf_of` is set, in which case the default is `KEEP` and any other value is disallowed.
+
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the review is stored.| Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+|`omit_duplicate_comments`| (optional) If `true`, comments with the same content at the same place will be omitted.|
+|`on_behalf_of`| (optional) [{account-id}](rest-api-accounts.html#account-id) the review should be posted on behalf of. To use this option the caller must have been granted `labelAs-NAME` permission for all keys of labels.|
+### ReviewerInfo
+
+The `ReviewerInfo` entity contains information about a reviewer and its votes on a change.
+
+`ReviewerInfo` has the same fields as [AccountInfo](rest-api-accounts.html#account-info) and includes [detailed account information](#detailed-accounts). In addition `ReviewerInfo` has the following fields:
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`approvals`| The approvals of the reviewer as a map that maps the label names to the approval values (“-2”, “-1”, “0”, “+1”, “+2”).|
+### ReviewerInput
+
+The `ReviewerInput` entity contains information for adding a reviewer to a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`reviewer`| The [ID](rest-api-accounts.html#account-id) of one account that should be added as reviewer or the [ID](rest-api-groups.html#group-id) of one group for which all members should be added as reviewers.| If an ID identifies both an account and a group, only the account is added as reviewer to the change.
+
+|`state`| (optional) Add reviewer in this state. Possible reviewer states are `REVIEWER` and `CC`. If not given, defaults to `REVIEWER`.|
+|`confirmed`| (optional) Whether adding the reviewer is confirmed.| The Gerrit server may be configured to [require a confirmation](config-gerrit.html#addreviewer.maxWithoutConfirmation) when adding a group as reviewer that has many members.
+
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the reviewer is added.| Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.
+If not set, the default is `ALL`.
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### RevisionInfo
+
+The `RevisionInfo` entity contains information about a patch set. Not all fields are returned by default. Additional fields can be obtained by adding `o` parameters as described in [Query Changes](#list-changes).
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`draft`| not set if `false`|
+Whether the patch set is a draft.
+
+|`kind`| The change kind. Valid values are `REWORK`, `TRIVIAL_REBASE`, `MERGE_FIRST_PARENT_UPDATE`, `NO_CODE_CHANGE`, and `NO_CHANGE`.|
+|`_number`| The patch set number.|
+|`created`| The [timestamp](rest-api.html#timestamp) of when the patch set was created.|
+|`uploader`| The uploader of the patch set as an [AccountInfo](rest-api-accounts.html#account-info) entity.|
+|`ref`| The Git reference for the patch set.|
+|`fetch`| Information about how to fetch this patch set. The fetch information is provided as a map that maps the protocol name (“git”, “http”, “ssh”) to [FetchInfo](#fetch-info) entities. This information is only included if a plugin implementing the [download commands](intro-project-owner.html#download-commands) interface is installed.|
+|`commit`| (optional) The commit of the patch set as [CommitInfo](#commit-info) entity.|
+|`files`| (optional) The files of the patch set as a map that maps the file names to [FileInfo](#file-info) entities. Only set if [CURRENT\_FILES](#current-files) or [ALL\_FILES](#all-files) option is requested.|
+|`actions`| (optional) Actions the caller might be able to perform on this revision. The information is a map of view name to [ActionInfo](#action-info) entities.|
+|`reviewed`| (optional) Indicates whether the caller is authenticated and has commented on the current revision. Only set if [REVIEWED](#reviewed) option is requested.|
+|`messageWithFooter`| (optional) If the [COMMIT\_FOOTERS](#commit-footers) option is requested and this is the current patch set, contains the full commit message with Gerrit-specific commit footers, as if this revision were submitted using the [Cherry Pick](project-configuration.html#cherry_pick) submit type.|
+|`push_certificate`| (optional) If the [PUSH\_CERTIFICATES](#push-certificates) option is requested, contains the push certificate provided by the user when uploading this patch set as a [PushCertificateInfo](#push-certificate-info) entity. This field is always set if the option is requested; if no push certificate was provided, it is set to an empty object.|
+### RobotCommentInfo
+
+The `RobotCommentInfo` entity contains information about a robot inline comment.
+
+`RobotCommentInfo` has the same fields as [CommentInfo](#comment-info). In addition `RobotCommentInfo` has the following fields:
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`robot_id`| The ID of the robot that generated this comment.|
+|`robot_run_id`| An ID of the run of the robot.|
+|`url`| (optional) URL to more information.|
+|`properties`| (optional) Robot specific properties as map that maps arbitrary keys to values.|
+|`fix_suggestions`| (optional) Suggested fixes for this robot comment as a list of [FixSuggestionInfo](#fix-suggestion-info) entities.|
+### RobotCommentInput
+
+The `RobotCommentInput` entity contains information for creating an inline robot comment.
+
+`RobotCommentInput` has the same fields as [RobotCommentInfo](#robot-comment-info).
+
+### RuleInput
+
+The `RuleInput` entity contains information to test a Prolog rule.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`rule`| Prolog code to execute instead of the code in `refs/meta/config`.|
+|`filters`| `RUN` if not set|
+When `RUN` filter rules in the parent projects are called to post-process the results of the project specific rule. This behavior matches how the rule will execute if installed.
+If `SKIP` the parent filters are not called, allowing the test to return results from the input rule.
+
+### SubmitInfo
+
+The `SubmitInfo` entity contains information about the change status after submitting.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`status`| The status of the change after submitting is `MERGED`.|
+|`on_behalf_of`| (optional) The [{account-id}](rest-api-accounts.html#account-id) of the user on whose behalf the action should be done. To use this option the caller must have been granted both `Submit` and `Submit (On Behalf Of)` permissions. The user named by `on_behalf_of` does not need to be granted the `Submit` permission. This feature is aimed for CI solutions: the CI account can be granted both permissions, so individual users don’t need `Submit` permission themselves. Still the changes can be submitted on behalf of real users and not with the identity of the CI account.|
+
+### SubmitInput
+
+The `SubmitInput` entity contains information for submitting a change.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`on_behalf_of`| (optional) If set, submit the change on behalf of the given user. The value may take any format [accepted by the accounts REST API](rest-api-accounts.html#account-id). Using this option requires [Submit (On Behalf Of)](access-control.html#category_submit_on_behalf_of) permission on the branch.|
+|`notify`| (optional) Notify handling that defines to whom email notifications should be sent after the change is submitted.|
+| |Allowed values are `NONE`, `OWNER`, `OWNER_REVIEWERS` and `ALL`.|
+| | If not set, the default is `ALL`.|
+
+|`notify_details`| (optional) Additional information about whom to notify about the update as a map of recipient type to [NotifyInfo](#notify-info) entity.|
+### SubmitRecord
+
+The `SubmitRecord` entity describes results from a submit\_rule. Fields in this entity roughly correspond to the fields set by `LABELS` in [LabelInfo](#label-info).
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`status`| `OK`, the change can be submitted.|
+| |`NOT_READY`, additional labels are required before submit.|
+| |`CLOSED`, closed changes cannot be submitted.|
+| |`RULE_ERROR`, rule code failed with an error. |
+|  |  *** |
+|`ok`| (optional) Map of labels that are approved; an [AccountInfo](rest-api-accounts.html#account-info) identifies the voter chosen by the rule.|
+|`reject`| (optional) Map of labels that are preventing submit; [AccountInfo](rest-api-accounts.html#account-info) identifies voter.|
+|`need`| (optional) Map of labels that need to be given to submit. The value is currently an empty object.|
+|`may`| (optional) Map of labels that can be used, but do not affect submit. [AccountInfo](rest-api-accounts.html#account-info) identifies voter, if the label has been applied.|
+|`impossible`| (optional) Map of labels that should have been in `need` but cannot be used by any user because of access restrictions. The value is currently an empty object.|
+|`error_message`| (optional) When status is RULE\_ERROR this message provides some text describing the failure of the rule predicate.|
+
+
+### SubmittedTogetherInfo
+
+The `SubmittedTogetherInfo` entity contains information about a collection of changes that would be submitted together.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`changes`| A list of ChangeInfo entities representing the changes to be submitted together.|
+|`non_visible_changes`| The number of changes to be submitted together that the current user cannot see. |
+| |(This count includes changes that are visible to the current user when their reason for being submitted together involves changes the user cannot see.)|
+
+### SuggestedReviewerInfo
+
+The `SuggestedReviewerInfo` entity contains information about a reviewer that can be added to a change (an account or a group).
+
+`SuggestedReviewerInfo` has either the `account` field that contains the [AccountInfo](rest-api-accounts.html#account-info) entity, or the `group` field that contains the [GroupBaseInfo](rest-api-changes.html#group-base-info) entity.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`account`| (optional) An [AccountInfo](rest-api-accounts.html#account-info) entity, if the suggestion is an account.|
+|`group`| (optional) A [GroupBaseInfo](rest-api-changes.html#group-base-info) entity, if the suggestion is a group.|
+|`count`| The total number of accounts in the suggestion. This is `1` if `account` is present. |
+|      | If `group` is present, the total number of accounts that are members of the group is returned (this count includes members of nested groups).|
+|`confirm`| (optional) True if `group` is present and `count` is above the threshold where the `confirmed` flag must be passed to add the group as a reviewer.|
+### TopicInput
+
+The `TopicInput` entity contains information for setting a topic.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`topic`| (optional) The topic. The topic will be deleted if not set.|
+### VotingRangeInfo
+
+The `VotingRangeInfo` entity describes the continuous voting range from min to max values.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`min`| The minimum voting value.|
+|`max`| The maximum voting value.|
+### WebLinkInfo
+
+The `WebLinkInfo` entity describes a link to an external site.
+
+
+
+|Field Name| Description|
+| ---                              | ---                                         |
+|`name`| The link name.|
+|`url`| The link URL.|
+|`image_url`| URL to the icon of the link.|
+* * *
+

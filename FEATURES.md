@@ -91,7 +91,8 @@ that use case in mind but not implemented here.
 integration point. 005 depends on feature 005 (user comments) being merged
 first. 006 is a leaf task.
 
-Full specs are in `spec/features/EPIC003-verification-comments/`.
+Full specs are in `spec/features/EPIC003-verification-comments/` but only on
+`origin/epic/003-verification-comments` branch
 
 ---
 
