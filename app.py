@@ -163,6 +163,147 @@ class App:
             _log.info("automerge set change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
+    def review_code_review(self, row: int, score: int) -> None:
+        if score < -2 or score > 2:
+            self.status_msg = f"[red]Score out of range: {score}[/red]"
+            return
+
+        ch = self.changes.at(row - 1)
+
+        if ch is None:
+            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
+            return
+
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot set code-review for change #{row} - no current revision known[/red]"
+            return
+
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            return
+
+        result = gerrit.query_review_code_review(ch.current_revision, score, instance.host, instance.port)
+
+        if "error" in result:
+            self.status_msg = f"[red]Code-Review failed for change #{row}: {result['error']}[/red]"
+            _log.warning(
+                "code-review failed change=%s instance=%s score=%d error=%s",
+                ch.number,
+                ch.instance,
+                score,
+                result["error"],
+            )
+        else:
+            sign = "+" if score > 0 else ""
+            self.status_msg = f"[green]Code-Review {sign}{score} set for change #{row}[/green]"
+            _log.info("code-review set change=%s instance=%s score=%d", ch.number, ch.instance, score)
+            self._start_refresh()
+
+    def review_abandon(self, row: int) -> None:
+        ch = self.changes.at(row - 1)
+
+        if ch is None:
+            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
+            return
+
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot abandon change #{row} - no current revision known[/red]"
+            return
+
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            return
+
+        result = gerrit.query_review_abandon(ch.current_revision, instance.host, instance.port)
+
+        if "error" in result:
+            self.status_msg = f"[red]Abandon failed for change #{row}: {result['error']}[/red]"
+            _log.warning("abandon failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
+        else:
+            self.status_msg = f"[green]Change #{row} abandoned[/green]"
+            _log.info("change abandoned change=%s instance=%s", ch.number, ch.instance)
+            self._start_refresh()
+
+    def review_restore(self, row: int) -> None:
+        ch = self.changes.at(row - 1)
+
+        if ch is None:
+            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
+            return
+
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot restore change #{row} - no current revision known[/red]"
+            return
+
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            return
+
+        result = gerrit.query_review_restore(ch.current_revision, instance.host, instance.port)
+
+        if "error" in result:
+            self.status_msg = f"[red]Restore failed for change #{row}: {result['error']}[/red]"
+            _log.warning("restore failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
+        else:
+            self.status_msg = f"[green]Change #{row} restored[/green]"
+            _log.info("change restored change=%s instance=%s", ch.number, ch.instance)
+            self._start_refresh()
+
+    def review_submit(self, row: int) -> None:
+        ch = self.changes.at(row - 1)
+
+        if ch is None:
+            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
+            return
+
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot submit change #{row} - no current revision known[/red]"
+            return
+
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            return
+
+        result = gerrit.query_review_submit(ch.current_revision, instance.host, instance.port)
+
+        if "error" in result:
+            self.status_msg = f"[red]Submit failed for change #{row}: {result['error']}[/red]"
+            _log.warning("submit failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
+        else:
+            self.status_msg = f"[green]Change #{row} submitted[/green]"
+            _log.info("change submitted change=%s instance=%s", ch.number, ch.instance)
+            self._start_refresh()
+
+    def review_rebase(self, row: int) -> None:
+        ch = self.changes.at(row - 1)
+
+        if ch is None:
+            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
+            return
+
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot rebase change #{row} - no current revision known[/red]"
+            return
+
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            return
+
+        result = gerrit.query_review_rebase(ch.current_revision, instance.host, instance.port)
+
+        if "error" in result:
+            self.status_msg = f"[red]Rebase failed for change #{row}: {result['error']}[/red]"
+            _log.warning("rebase failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
+        else:
+            self.status_msg = f"[green]Rebase triggered for change #{row}[/green]"
+            _log.info("rebase triggered change=%s instance=%s", ch.number, ch.instance)
+            self._start_refresh()
+
     # --- Config methods ---
 
     def reload_config(self, force: bool = False) -> bool:
