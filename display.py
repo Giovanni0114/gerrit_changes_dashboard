@@ -42,10 +42,13 @@ def approvals_to_text(approvals: Iterable[ApprovalEntry]) -> Text:
             approvals_text.append(f" ({appr.by})", style="dim")
         approvals_text.append("\n")
 
-    # remove last newline
     approvals_text = approvals_text[:-1]
 
     return approvals_text
+
+
+def enumerate_comments(comments: Iterable[str]) -> str:
+    return "\n".join(f"{idx}. {comment}\n" for idx, comment in enumerate(comments, 1))
 
 
 def build_table(
@@ -126,6 +129,7 @@ def build_table(
             styles["subject"] += " strike dim"
             styles["project"] += " dim"
             styles["row"] = " on #1c1c1c"
+            styles["comments"] += " dim strike"
 
             approvals_text = Text("deleted", style="dim red")
 
@@ -133,31 +137,21 @@ def build_table(
             styles["subject"] += " dim italic"
             styles["project"] += " dim"
             styles["row"] = "on #1c1c1c"
+            styles["comments"] += " dim italic"
 
             approvals_text = Text("disabled", style="dim yellow")
 
         elif ch.waiting:
             styles["row"] = "dim on #2a2a2a"
 
-        # Build comments text
-        comments_text = Text()
-        if ch.comments:
-            comments_lines = "\n".join(ch.comments)
-            if ch.deleted:
-                comments_text = Text(comments_lines, style="dim strike")
-            elif ch.disabled:
-                comments_text = Text(comments_lines, style="dim italic")
-            elif ch.waiting:
-                comments_text = Text(comments_lines, style="dim")
-            else:
-                comments_text = Text(comments_lines, style=styles["comments"])
+        comments_text = enumerate_comments(ch.comments) if ch.comments else ""
 
         table.add_row(
             Text(str(idx), style=styles["idx"]),
             Text(number_text, style=styles["number"]),
             Text(project_text, style=styles["project"]),
             Text(subject_text, style=styles["subject"]),
-            comments_text,
+            Text(comments_text, style=styles["comments"]),
             approvals_text,
             style=styles["row"],
         )
