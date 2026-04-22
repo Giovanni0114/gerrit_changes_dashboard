@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from models import AppContext
+
+if TYPE_CHECKING:
+    from .input_engine import LeafAction
 
 Context = dict[str, str]
 
@@ -65,3 +70,18 @@ def instances_hint(app_ctx: AppContext) -> str:
     if not app_ctx.config.instances:
         return "No instances configured"
     return "Instances: " + ", ".join(f"{idx + 1}={inst.name}" for idx, inst in enumerate(app_ctx.config.instances))
+
+
+def code_review_hint(app_ctx: AppContext) -> str:
+    return "-2=Do not submit, -1=I prefer not, 0=No score, +1=Looks good, +2=Approved"
+
+
+_special_hint_keys = {" ": "<Space>"}
+
+
+def _get_special_hint_keys(key: str) -> str:
+    return _special_hint_keys.get(key, key)
+
+
+def generate_hints(menu_map: dict[str, LeafAction]) -> str:
+    return "  ".join(f"[bold]{_get_special_hint_keys(key)}[/] {item.label}" for key, item in menu_map.items())

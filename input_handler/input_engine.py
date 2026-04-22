@@ -6,7 +6,6 @@ from utils import Arrow
 
 from .context_actions import (
     add_change,
-    code_review_hint,
     comment_add,
     comment_delete,
     comment_edit_last,
@@ -27,10 +26,10 @@ from .context_actions import (
     toggle_disable,
     toggle_waiting,
 )
-from .utils import Context, InputField, instances_hint
+from .utils import Context, InputField, code_review_hint, generate_hints, instances_hint
 
 PROMPT_PER_LAST_KEY = {
-    "a": "Add change (number)",
+    "a": "Add change",
     "w": "Toggle waiting",
     "d": "Toggle disabled",
     "x": "Toggle deletion",
@@ -41,88 +40,75 @@ PROMPT_PER_LAST_KEY = {
 }
 
 
-
-@dataclass(frozen=True)
-class SubAction:
-    action: Callable[[AppContext, Context], None]
-    required_inputs: list[InputField]
-    prompt_label: str | None = None
-    menu_label: str | None = None
-
-
 @dataclass(frozen=True)
 class LeafAction:
-    action: Callable[[AppContext, Context], None]
+    action: Callable[[AppContext, Context], None] | None
     required_inputs: list[InputField]
+    label: str | None = None
 
 
-@dataclass(frozen=True)
-class MenuAction:
-    required_inputs: list[InputField]
-    sub_actions: dict[str, SubAction]
-    label: str
-
-
-Action = LeafAction | MenuAction
-
-
-REFRESH_ACTION = LeafAction(refresh, [])
-QUIT_ACTION = LeafAction(quit_app, [])
-FETCH_ACTION = LeafAction(fetch_my_changes, [])
-
-# Common InputField for index parameters — allows digits plus multi-index notation chars (, - space).
+# extra chars for rich index notation chars (, - space).
 _IDX_EXTRA = frozenset({",", "-", " "})
 
-# --- Input field definitions ---
-IDX_FIELD = InputField("idx", digits_only=True)
+
+def input_idx_factory(add_special_chars: set[str] | None = None) -> InputField:
+    spec_chars = {"a"}
+    if add_special_chars:
+        spec_chars.update(add_special_chars)
+
+    return InputField("idx", frozenset(spec_chars), True, _IDX_EXTRA)
+
+
 TEXT_FIELD = InputField("text")
 COMMENT_IDX_FIELD = InputField("comment_idx", frozenset({"a"}), digits_only=True)
 CONFIRM_FIELD = InputField("confirm", frozenset({"y", "n"}))
 SCORE_FIELD = InputField(
-    "score",
-    digits_only=True,
-    extra_chars=frozenset({"+", "-"}),
-    special_hint_func=code_review_hint,
+    "score", digits_only=True, extra_chars=frozenset({"+", "-"}), special_hint_func=code_review_hint
 )
 
+NUMBER_FIELD = InputField("number", digits_only=True)
+INSTANCE_FIELD = InputField("instance", special_hint_func=instances_hint)
+
+TOP_LEVEL_ACTIONS = {
+    " ": LeafAction(None, [], "Changes actions"),
+    "r": LeafAction(refresh, [], "Refresh"),
+    "q": LeafAction(quit_app, [], "Quit"),
+    "f": LeafAction(fetch_my_changes, [], "Fetch"),
+    "a": LeafAction(add_change, [NUMBER_FIELD, INSTANCE_FIELD], "Add change"),
+    "e": LeafAction(None, [], "Editor"),
+}
+
 # --- Comment sub-actions ---
-COMMENT_SUBACTIONS: dict[str, SubAction] = {
-    "a": SubAction(comment_add, [TEXT_FIELD], menu_label="a=add"),
-    "A": SubAction(comment_replace_all, [TEXT_FIELD], menu_label="A=replace all"),
-    "e": SubAction(comment_edit_last, [TEXT_FIELD], menu_label="e=edit last"),
-    "d": SubAction(comment_delete, [COMMENT_IDX_FIELD], menu_label="d=delete"),
+COMMENT_ACTIONS: dict[str, LeafAction] = {
+    "a": LeafAction(comment_add, [input_idx_factory(), TEXT_FIELD], "add"),
+    "A": LeafAction(comment_replace_all, [input_idx_factory(), TEXT_FIELD], "replace all"),
+    "e": LeafAction(comment_edit_last, [input_idx_factory(), TEXT_FIELD], "edit last"),
+    "d": LeafAction(comment_delete, [input_idx_factory(), COMMENT_IDX_FIELD], "delete"),
 }
 
 # --- Review sub-actions ---
-REVIEW_SUBACTIONS: dict[str, SubAction] = {
-    "a": SubAction(review_abandon_action, [CONFIRM_FIELD], "Abandon change #{idx}?", "a=abandon"),
-    "b": SubAction(review_rebase_action, [], menu_label="b=rebase"),
-    "R": SubAction(review_restore_action, [], menu_label="R=restore"),
-    "c": SubAction(review_code_review_action, [SCORE_FIELD], "Code-Review change #{idx}", "c=code-review"),
-    "s": SubAction(review_submit_action, [CONFIRM_FIELD], "Submit change #{idx}? irreversible", "s=submit"),
-    "m": SubAction(set_automerge, [], "Automerge +1 change #{idx}", "m=automerge"),
+REVIEW_ACTIONS: dict[str, LeafAction] = {
+    "a": LeafAction(review_abandon_action, [input_idx_factory(), CONFIRM_FIELD], "abandon"),
+    "b": LeafAction(review_rebase_action, [input_idx_factory()], "rebase"),
+    "R": LeafAction(review_restore_action, [input_idx_factory()], "restore"),
+    "c": LeafAction(review_code_review_action, [input_idx_factory(), SCORE_FIELD], "code-review"),
+    "s": LeafAction(review_submit_action, [input_idx_factory(), CONFIRM_FIELD], "submit"),
+    "m": LeafAction(set_automerge, [input_idx_factory()], "automerge"),
 }
 
 
-LEADER_ACTIONS: dict[str, Action | None] = {
-    "a": LeafAction(
-        add_change, [InputField("number", digits_only=True), InputField("instance", special_hint_func=instances_hint)]
-    ),
-    "w": LeafAction(toggle_waiting, [InputField("idx", frozenset({"a"}), digits_only=True, extra_chars=_IDX_EXTRA)]),
-    "d": LeafAction(toggle_disable, [InputField("idx", frozenset({"a"}), digits_only=True, extra_chars=_IDX_EXTRA)]),
-    "x": LeafAction(
-        handle_deletion,
-        [InputField("idx", frozenset({"a", "x", "r"}), digits_only=True, extra_chars=_IDX_EXTRA)],
-    ),
-    "o": LeafAction(open_change, [InputField("idx", digits_only=True, extra_chars=_IDX_EXTRA)]),
-    "c": MenuAction([IDX_FIELD], COMMENT_SUBACTIONS, "comment"),
-    "r": MenuAction([IDX_FIELD], REVIEW_SUBACTIONS, "review"),
-    "e": None,  # submenu — resolved in match_action via full sequence
+LEADER_ACTIONS: dict[str, LeafAction] = {
+    "w": LeafAction(toggle_waiting, [input_idx_factory()], "Toggle waiting"),
+    "d": LeafAction(toggle_disable, [input_idx_factory()], "Toggle disabled"),
+    "x": LeafAction(handle_deletion, [input_idx_factory({"x", "a"})], "Toggle deletion"),
+    "o": LeafAction(open_change, [input_idx_factory()], "Open change"),
+    "c": LeafAction(None, [], "Comment"),  # submenu
+    "r": LeafAction(None, [], "Review"),  # submenu
 }
 
 EDITOR_ACTIONS: dict[str, LeafAction] = {
-    "c": LeafAction(open_config_in_editor, []),
-    "a": LeafAction(open_changes_in_editor, []),
+    "c": LeafAction(open_config_in_editor, [], "config"),
+    "a": LeafAction(open_changes_in_editor, [], "changes"),
 }
 
 
@@ -132,40 +118,35 @@ def key_allowed_in_sequence(key: str, sequence: Iterable[str]) -> bool:
 
     match sequence:
         case []:
-            return key in (" ", "r", "q", "f", "e")
+            return key in TOP_LEVEL_ACTIONS
         case [" "]:
             return key in LEADER_ACTIONS
         case ["e"]:
             return key in EDITOR_ACTIONS
+        case [" ", "r"]:
+            return key in REVIEW_ACTIONS
+        case [" ", "c"]:
+            return key in COMMENT_ACTIONS
 
     return False
 
 
-def match_action(sequence: list[str]) -> Action | None:
+def match_action(sequence: list[str]) -> LeafAction | None:
     if not sequence:
         return None
 
     match sequence:
+        case [key]:
+            return TOP_LEVEL_ACTIONS.get(key, None)
         case ["e", key]:
             return EDITOR_ACTIONS.get(key, None)
         case [" ", key]:
             return LEADER_ACTIONS.get(key, None)
-
-    last = sequence[-1]
-
-    match last:
-        case "r":
-            return REFRESH_ACTION
-
-        case "q":
-            return QUIT_ACTION
-
-        case "f":
-            return FETCH_ACTION
-
-        case _:
-            action = LEADER_ACTIONS.get(last, None)
-            return action
+        case [" ", "c", key]:
+            return COMMENT_ACTIONS.get(key, None)
+        case [" ", "r", key]:
+            return REVIEW_ACTIONS.get(key, None)
+    return None
 
 
 class InputHandler:
@@ -176,53 +157,36 @@ class InputHandler:
         self.input: str | None = None
         self.current_field: InputField | None = None
         self.context: dict[str, str] = {}
-        self.pending_sub_actions: dict[str, SubAction] | None = None
-        self.pending_menu: MenuAction | None = None
         self.current_action: LeafAction | None = None
-        self.active_sub_action: SubAction | None = None
 
     def hints(self) -> str:
         """Return keyboard shortcut hints for the current input state."""
-        if self.sequence[:1] == ["e"]:
-            return "[bold]c[/] config  [bold]a[/] approvals"
-        elif self.sequence[:1] == [" "]:
-            return (
-                "[bold]a[/] add  "
-                "[bold]w[/] wait  "
-                "[bold]d[/] disable  "
-                "[bold]x[/] delete  "
-                "[bold]o[/] open  "
-                "[bold]c[/] comment  "
-                "[bold]r[/] review"
-            )
-
-        return "[bold]Space[/] Changes  [bold]q[/] quit  [bold]r[/] refresh  [bold]f[/] fetch  [bold]e[/] editor  "
+        match self.sequence:
+            case []:
+                return generate_hints(TOP_LEVEL_ACTIONS)
+            case ["e"]:
+                return generate_hints(EDITOR_ACTIONS)
+            case [" "]:
+                return generate_hints(LEADER_ACTIONS)
+            case [" ", "c"]:
+                return generate_hints(COMMENT_ACTIONS)
+            case [" ", "r"]:
+                return generate_hints(REVIEW_ACTIONS)
+        return ""
 
     def prompt(self) -> str:
         if len(self.sequence) == 0:
             return ""
 
-        if self.pending_sub_actions is not None:
-            options = []
-            for key in sorted(self.pending_sub_actions.keys()):
-                sub = self.pending_sub_actions[key]
-                if sub.menu_label:
-                    options.append(sub.menu_label)
-
-            label = self.pending_menu.label if self.pending_menu else ""
-
-            return f"{label} > {' / '.join(options)} [ESC=cancel]"
-
         if self.input is not None and self.current_field is not None:
-            if self.active_sub_action and self.active_sub_action.prompt_label:
-                hint = self.active_sub_action.prompt_label.format(**self.context)
+            if self.current_action and self.current_action.label:
+                hint = self.current_action.label
             else:
                 hint = PROMPT_PER_LAST_KEY.get(self.sequence[-1], "")
-            special_hint = ""
 
+            special_hint = ""
             if special := self.current_field.special_chars:
                 special_hint = f" [{' / '.join(sorted(special))}]"
-
             elif self.current_field.special_hint_func is not None:
                 func_hint = self.current_field.special_hint_func(self.app_context)
                 special_hint += f"({func_hint})"
@@ -234,41 +198,12 @@ class InputHandler:
 
     def handle_key(self, key: str | Arrow) -> None:
         if isinstance(key, Arrow):
-            # self.app_context.status_msg = f"Arrow detected: {key}"
-            # TODO: create an handling for arrow navigation
+            # TODO: arrow navigation
             return
 
         if key == "<esc>":
             self.reset()
             return
-
-        # Check if we're in sub-action selection mode
-        if self.pending_sub_actions is not None:
-            if key in self.pending_sub_actions:
-                sub_action = self.pending_sub_actions[key]
-                self.pending_sub_actions = None
-                self.active_sub_action = sub_action
-                self.current_action = LeafAction(sub_action.action, sub_action.required_inputs)
-
-                # Special handling for 'e' (edit) sub-action - check if there are comments to edit
-                if key == "e":
-                    idx = int(self.context["idx"])
-                    comments = self.app_context.changes[idx - 1].comments
-                    if not comments:
-                        self.app_context.status_msg = "[red]No comments to edit[/red]"
-                        self.reset()
-                        return
-                    # Pre-fill with last comment
-                    self._start_field_collection_with_prefill(comments[-1])
-                else:
-                    self._try_execute()
-                return
-            else:
-                # Invalid sub-action key
-                valid_keys = ", ".join(sorted(self.pending_sub_actions.keys()))
-                self.app_context.status_msg = f"[red]Invalid option. Choose from: {valid_keys}[/red]"
-                self.reset()
-                return
 
         if self.input is not None:
             completed = self._handle_input(key)
@@ -289,59 +224,54 @@ class InputHandler:
         self._try_execute()
 
     def _try_execute(self) -> None:
-        """Find the action for the current sequence and execute it, or enter input mode for next required field."""
+        """Execute action if all fields collected, otherwise prompt for the next field."""
         if not self.sequence:
             return
 
-        action: Action | None = self.current_action or match_action(self.sequence)
+        action = self.current_action or match_action(self.sequence)
 
-        if action is None:
+        # No match yet or submenu marker — wait for more input.
+        if action is None or action.action is None:
             return
+
+        self.current_action = action
 
         for required_field in action.required_inputs:
-            if required_field.name not in self.context:
-                self.input = ""
-                self.current_field = required_field
+            if required_field.name in self.context:
+                continue
+
+            prefill = self._prefill_for_field(action, required_field)
+            if prefill is None:
                 return
-
-        # All fields collected
-        if isinstance(action, LeafAction):
-            action.action(self.app_context, self.context)
-            self.reset()
-        elif isinstance(action, MenuAction):
-            self.pending_sub_actions = action.sub_actions
-            self.pending_menu = action
-            self.current_action = None
-
-    def _start_field_collection(self) -> None:
-        """Start collecting fields for the current action."""
-        if self.current_action is None:
+            self.input = prefill
+            self.current_field = required_field
             return
-        for required_field in self.current_action.required_inputs:
-            if required_field.name not in self.context:
-                self.input = ""
-                self.current_field = required_field
-                return
 
-    def _start_field_collection_with_prefill(self, prefill: str) -> None:
-        """Start collecting fields with pre-filled input for the first field."""
-        if self.current_action is None:
-            return
-        for required_field in self.current_action.required_inputs:
-            if required_field.name not in self.context:
-                self.input = prefill
-                self.current_field = required_field
-                return
+        action.action(self.app_context, self.context)
+        self.reset()
+
+    def _prefill_for_field(self, action: LeafAction, field: InputField) -> str | None:
+        """Return prefill for the field. None means the flow was aborted (state already reset)."""
+        if action.action is comment_edit_last and field.name == "text":
+            idx = int(self.context["idx"])
+            if idx < 1 or idx > len(self.app_context.changes):
+                self.app_context.status_msg = f"[red]Invalid idx: {idx}[/red]"
+                self.reset()
+                return None
+            comments = self.app_context.changes[idx - 1].comments
+            if not comments:
+                self.app_context.status_msg = "[red]No comments to edit[/red]"
+                self.reset()
+                return None
+            return comments[-1]
+        return ""
 
     def reset(self) -> None:
         self.input = None
         self.current_field = None
         self.sequence = []
         self.context = {}
-        self.pending_sub_actions = None
-        self.pending_menu = None
         self.current_action = None
-        self.active_sub_action = None
 
     def _handle_input(self, key: str) -> bool:
         """Process a key while in input mode. Returns True if the field is now complete."""

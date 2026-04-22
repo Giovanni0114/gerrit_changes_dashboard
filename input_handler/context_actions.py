@@ -193,8 +193,3 @@ def review_code_review_action(app_ctx: AppContext, ctx: Context) -> None:
         app_ctx.status_msg = f"[red]Score out of range: {score}[/red]"
         return
     app_ctx.review_code_review(int(ctx["idx"]), score)
-
-
-def code_review_hint(app_ctx: AppContext) -> str:
-    return "-2=Do not submit, -1=I prefer not, 0=No score, +1=Looks good, +2=Approved"
-
