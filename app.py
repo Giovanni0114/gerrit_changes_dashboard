@@ -712,12 +712,12 @@ class App:
             with Live(
                 self.build(self.input.prompt()),
                 console=_console,
-                refresh_per_second=10,
+                refresh_per_second=self.config.ui_refresh_rate,
                 screen=True,
             ) as live:
                 while self.running:
-                    time.sleep(0.1)
-                    self.seconds_since_refresh += 0.1
+                    time.sleep(self.config.ui_refresh_interval_sec)
+                    self.seconds_since_refresh += self.config.ui_refresh_interval_sec
                     needs_visual_update = False
 
                     # Check if background refresh just completed

@@ -7,6 +7,7 @@ from pathlib import Path
 from models import GerritInstance
 
 DEFAULT_INTERVAL = 30
+DEFAULT_REFRESH_RATE = 20
 DEFAULT_CHANGES_FILENAME = "changes.json"
 DEFAULT_CACHE_FILENAME = "cache.json"
 DEFAULT_LOG_DIRNAME = "log"
@@ -33,6 +34,7 @@ class AppConfig:
     path: Path
 
     interval: int
+    ui_refresh_rate: float
     changes_path: Path
     cache_path: Path
     log_path: Path
@@ -67,6 +69,14 @@ class AppConfig:
 
         if self.interval < 1:
             raise ValueError(f"interval must be >= 1, got {self.interval}")
+
+        try:
+            self.ui_refresh_rate = float((config_data.get("ui_refresh_rate", DEFAULT_REFRESH_RATE)))
+        except Exception as ex:
+            raise ValueError(f"Invalid refresh rate value: {config_data.get('ui_refresh_rate')}") from ex
+
+        if self.ui_refresh_rate < 1:
+            raise ValueError(f"refresh rate must be >= 1, got {self.ui_refresh_rate}")
 
         changes_file_filename = config_data.get("changes_file", DEFAULT_CHANGES_FILENAME)
         self.changes_path = (self.path.parent / changes_file_filename).resolve()
@@ -147,6 +157,10 @@ class AppConfig:
             return self._editor
         return os.environ.get("EDITOR") or None
 
+    @property
+    def ui_refresh_interval_sec(self) -> float:
+        return 1 / self.ui_refresh_rate
+
     def resolve_email(self, instance: GerritInstance) -> str | None:
         if instance.email:
             return instance.email
@@ -163,12 +177,13 @@ def generate_example_config(path: Path) -> None:
     content = (
         "# Gerrit Changes Dashboard settings\n"
         "[config]\n"
-        "interval = 30\n"
-        'changes_file = "./changes.json"  # path relative to this file\n'
-        '# cache_file = "./cache.json"  # SSH data cache, path relative to this file\n'
-        'log_dir = "./log"  # path relative to this file; created if missing\n'
         'default_host = "gerrit.example.com"\n'
         "default_port = 22\n"
+        "# interval = 30\n"
+        "# ui_refresh_rate = 20 \n"
+        '# changes_file = "./changes.json"  # path relative to this file\n'
+        '# cache_file = "./cache.json"  # SSH data cache, path relative to this file\n'
+        '# log_dir = "./log"  # path relative to this file; created if missing\n'
         '# default_email = "you@example.com"  # falls back to git config user.email\n'
         '# editor = "vim"  # falls back to env EDITOR\n'
         "\n"
