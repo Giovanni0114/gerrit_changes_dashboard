@@ -67,7 +67,7 @@ If the arrow is used when index is expected:
 ## 010 | Add spinner and countdown to header
 
 Currently header shows just time of refreshed, and this is often misleading. I
-want to add some sort of rich.Spinner to indicate when operations are running
+want to add some sort of rich. Spinner to indicate when operations are running
 in the background. Also, current time should be replaced with countdown to next
 planned refresh.
 
@@ -77,6 +77,22 @@ planned refresh.
 
 So if comment contains a link, it should display just hostname
 and generates clickable link just like number is clickable.
+
+---
+
+## 021 | After index is specified, chosen row highlights
+
+After idx was specified by user, one or more rows that was selected should highlight.
+
+---
+
+## 022 | rich index notation for comments
+
+user should be able to specify multiple comments to delete
+editing ofc still should be limited to only one target
+
+also validate input, maybe more sophisticated system is needed
+
 
 
 # Dev Stories
