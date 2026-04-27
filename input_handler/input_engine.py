@@ -259,7 +259,7 @@ class InputHandler:
                 self.reset()
                 return None
 
-            change = self.app_context.changes.at(idx - 1)
+            change = self.app_context.changes.at(list(idx.values)[0] - 1)
 
             if not change or not change.comments:
                 self.app_context.status_msg = "[red]No comments to edit[/red]"
