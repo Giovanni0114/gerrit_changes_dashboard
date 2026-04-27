@@ -133,15 +133,15 @@ def build_table(
             approvals_text = Text("deleted", style="dim red")
 
         elif ch.disabled:
-            styles["subject"] += " dim italic"
-            styles["project"] += " dim"
-            styles["row"] = "on #1c1c1c"
-            styles["comments"] += " dim italic"
+            styles["row"] = "italic dim on #1c1c1c"
+            # styles["subject"] += " dim italic"
+            # styles["project"] += " dim"
+            # styles["comments"] += " dim italic"
 
             approvals_text = Text("disabled", style="dim yellow")
 
         elif ch.waiting:
-            styles["row"] = "dim on #2a2a2a"
+            styles["row"] = "on #2a2a2a"
 
         comments_text = enumerate_comments(ch.comments) if ch.comments else ""
 
