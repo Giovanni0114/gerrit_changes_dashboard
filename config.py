@@ -41,13 +41,17 @@ class AppConfig:
 
     _instances: list[GerritInstance]
     _editor: str | None = None
+    _file_mtime: float
 
     def __init__(self, path: Path) -> None:
         self.path = path
         self._instances = []
         self.load_config()
 
-    def mtime(self) -> float:
+    def is_file_changed(self) -> bool:
+        return self._mtime() != self._file_mtime
+
+    def _mtime(self) -> float:
         try:
             return self.path.stat().st_mtime
         except OSError:
@@ -126,6 +130,8 @@ class AppConfig:
 
         if len(set((ins.name for ins in self._instances))) != len(self._instances):
             raise ValueError("Instance names must be unique.")
+
+        self._file_mtime = self._mtime()
 
     @property
     def default_host(self) -> str:

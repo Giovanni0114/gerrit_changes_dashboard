@@ -5,8 +5,6 @@ import sys
 from pathlib import Path
 
 from app import App
-from cache import SshCache
-from changes import Changes
 from config import (
     AppConfig,
     generate_example_config,

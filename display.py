@@ -1,5 +1,4 @@
 from datetime import datetime
-from pathlib import Path
 from typing import Iterable
 
 from rich.console import Group
@@ -8,6 +7,7 @@ from rich.table import Table
 from rich.text import Text
 
 from changes import Changes
+from config import AppConfig
 from models import ApprovalEntry, TrackedChange
 
 
@@ -53,14 +53,13 @@ def enumerate_comments(comments: Iterable[str]) -> str:
 
 def build_table(
     changes: Changes,
-    config_path: Path,
-    interval: float,
+    config: AppConfig,
     status_msg: str = "",
     ssh_requests: int = 0,
     hints: str = "",
 ) -> Table:
     # TODO config.py should produce message with config summary
-    caption = f"[dim]config:[/dim] {config_path} | [dim]interval:[/dim] {interval}s"
+    caption = f"[dim]config:[/dim] {config.path} | [dim]interval:[/dim] {config.interval}s"
 
     if hints:
         caption = f"{caption}\n{hints}"

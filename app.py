@@ -12,7 +12,7 @@ from rich.console import Console, Group
 from rich.live import Live
 
 import gerrit
-from cache import CacheEntry, SshCache
+from cache import SshCache
 from changes import Changes
 from config import (
     AppConfig,
@@ -21,7 +21,7 @@ from display import build_header, build_layout, build_table
 from gerrit import is_submitted, query_approvals, query_open_changes
 from input_handler import InputHandler
 from logs import app_logger
-from models import ApprovalEntry, GerritInstance, TrackedChange
+from models import ApprovalEntry, GerritInstance, Index, TrackedChange
 from utils import Arrow, AtomicCounter, NoEcho
 
 _console = Console()
@@ -83,8 +83,7 @@ class App:
         self.pending_editor: EditorTarget | None = None
         self._pause_keys = Event()
 
-        self.config_mtime = self.config.mtime()
-        self.changes_mtime = self.changes.mtime()
+        self.needs_visual_update = False
 
         self._sync_cache_with_changes()
 
@@ -103,6 +102,20 @@ class App:
         self.cache.evict({(ch.number, ch.instance) for ch in tracked})
         for ch in tracked:
             self.cache.hydrate(ch)
+
+    def _resolve_index(self, rows: Index) -> list[TrackedChange]:
+        changes = self.changes.get_running() if rows.wildcard else rows.resolve(self.changes)
+        if not changes:
+            self.status_msg = "[red]No matching changes for operation[/red]"
+
+        return changes
+
+    def _resolve_index_for_all(self, rows: Index) -> list[TrackedChange]:
+        changes = self.changes.get_all() if rows.wildcard else rows.resolve(self.changes)
+        if not changes:
+            self.status_msg = "[red]No matching changes for operation[/red]"
+
+        return changes
 
     # --- Query methods ---
 
@@ -123,9 +136,6 @@ class App:
             for ch, data in pool.map(self._query, changes):
                 _store_result(ch, data, self.cache)
 
-        self.cache.save_file()
-        self.changes_mtime = self.changes.save_changes()
-
     def query_active_changes(self) -> None:
         self._do_query(self.changes.get_running())
 
@@ -133,60 +143,64 @@ class App:
         uncached = [ch for ch in self.changes.get_disabled() if not self.cache.has(ch)]
         self._do_query(uncached)
 
-    def set_automerge(self, row: int) -> None:
-        ch = self.changes.at(row - 1)
+    # --- Review methods ---
 
-        if ch is None:
-            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
+    def review_set_automerge(self, rows: Index) -> None:
+        for ch in self._resolve_index(rows):
+            self._review_set_automerge(ch)
+
+    def _review_set_automerge(self, ch: TrackedChange) -> None:
+        if ch.current_revision is None:
+            self.status_msg = f"[red]cannot set automerge for change {ch.number} - no current revision known[/red]"
             return
 
-        if ch.current_revision is None:
-            self.status_msg = f"[red]cannot set automerge for change #{row} - no current revision known[/red]"
+        if ch.submitted:
+            self.status_msg = (
+                f"[yellow]cannot set automerge for change {ch.number} - change is already submitted[/yellow]"
+            )
             return
 
         if any(approval.label == "Automerge" for approval in ch.approvals):
-            self.status_msg = f"[yellow]Label Automerge already exists for change #{row}[/yellow]"
+            self.status_msg = f"[yellow]Label Automerge already exists for change {ch.number}[/yellow]"
             return
 
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
-            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{ch.number}[/red]"
             return
 
         result = gerrit.query_set_automerge(ch.current_revision, instance.host, instance.port)
 
         if "error" in result:
-            self.status_msg = f"[red]Automerge failed for change #{row}: {result['error']}[/red]"
+            self.status_msg = f"[red]Automerge failed for change #{ch.number}: {result['error']}[/red]"
             _log.warning("automerge failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
         else:
-            self.status_msg = f"[green]Automerge +1 set for change #{row}[/green]"
+            self.status_msg = f"[green]Automerge +1 set for change #{ch.number}[/green]"
             _log.info("automerge set change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
-    def review_code_review(self, row: int, score: int) -> None:
+    def review_code_review(self, rows: Index, score: int) -> None:
+        for ch in self._resolve_index(rows):
+            self._review_code_review(ch, score)
+
+    def _review_code_review(self, ch: TrackedChange, score: int) -> None:
         if score < -2 or score > 2:
             self.status_msg = f"[red]Score out of range: {score}[/red]"
             return
 
-        ch = self.changes.at(row - 1)
-
-        if ch is None:
-            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
-            return
-
         if ch.current_revision is None:
-            self.status_msg = f"[red]cannot set code-review for change #{row} - no current revision known[/red]"
+            self.status_msg = f"[red]cannot set code-review for change {ch.number} - no current revision known[/red]"
             return
 
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
-            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
         result = gerrit.query_review_code_review(ch.current_revision, score, instance.host, instance.port)
 
         if "error" in result:
-            self.status_msg = f"[red]Code-Review failed for change #{row}: {result['error']}[/red]"
+            self.status_msg = f"[red]Code-Review failed for change #{ch.number}: {result['error']}[/red]"
             _log.warning(
                 "code-review failed change=%s instance=%s score=%d error=%s",
                 ch.number,
@@ -196,141 +210,117 @@ class App:
             )
         else:
             sign = "+" if score > 0 else ""
-            self.status_msg = f"[green]Code-Review {sign}{score} set for change #{row}[/green]"
+            self.status_msg = f"[green]Code-Review {sign}{score} set for change #{ch.number}[/green]"
             _log.info("code-review set change=%s instance=%s score=%d", ch.number, ch.instance, score)
             self._start_refresh()
 
-    def review_abandon(self, row: int) -> None:
-        ch = self.changes.at(row - 1)
+    def review_abandon(self, rows: Index) -> None:
+        for ch in self._resolve_index(rows):
+            self._review_abandon(ch)
 
-        if ch is None:
-            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
-            return
-
+    def _review_abandon(self, ch: TrackedChange) -> None:
         if ch.current_revision is None:
-            self.status_msg = f"[red]cannot abandon change #{row} - no current revision known[/red]"
+            self.status_msg = f"[red]cannot abandon change {ch.number} - no current revision known[/red]"
             return
 
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
-            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
         result = gerrit.query_review_abandon(ch.current_revision, instance.host, instance.port)
 
         if "error" in result:
-            self.status_msg = f"[red]Abandon failed for change #{row}: {result['error']}[/red]"
+            self.status_msg = f"[red]Abandon failed for change {ch.number}: {result['error']}[/red]"
             _log.warning("abandon failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
         else:
-            self.status_msg = f"[green]Change #{row} abandoned[/green]"
+            self.status_msg = f"[green]Change {ch.number} abandoned[/green]"
             _log.info("change abandoned change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
-    def review_restore(self, row: int) -> None:
-        ch = self.changes.at(row - 1)
+    def review_restore(self, rows: Index) -> None:
+        for ch in self._resolve_index(rows):
+            self._review_restore(ch)
 
-        if ch is None:
-            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
-            return
-
+    def _review_restore(self, ch: TrackedChange) -> None:
         if ch.current_revision is None:
-            self.status_msg = f"[red]cannot restore change #{row} - no current revision known[/red]"
+            self.status_msg = f"[red]cannot restore change {ch.number} - no current revision known[/red]"
             return
 
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
-            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
         result = gerrit.query_review_restore(ch.current_revision, instance.host, instance.port)
 
         if "error" in result:
-            self.status_msg = f"[red]Restore failed for change #{row}: {result['error']}[/red]"
+            self.status_msg = f"[red]Restore failed for change {ch.number}: {result['error']}[/red]"
             _log.warning("restore failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
         else:
-            self.status_msg = f"[green]Change #{row} restored[/green]"
+            self.status_msg = f"[green]Change {ch.number} restored[/green]"
             _log.info("change restored change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
-    def review_submit(self, row: int) -> None:
-        ch = self.changes.at(row - 1)
+    def review_submit(self, rows: Index) -> None:
+        for ch in self._resolve_index(rows):
+            self._review_submit(ch)
 
-        if ch is None:
-            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
-            return
-
+    def _review_submit(self, ch: TrackedChange) -> None:
         if ch.current_revision is None:
-            self.status_msg = f"[red]cannot submit change #{row} - no current revision known[/red]"
+            self.status_msg = f"[red]cannot submit change {ch.number} - no current revision known[/red]"
             return
 
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
-            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
         result = gerrit.query_review_submit(ch.current_revision, instance.host, instance.port)
 
         if "error" in result:
-            self.status_msg = f"[red]Submit failed for change #{row}: {result['error']}[/red]"
+            self.status_msg = f"[red]Submit failed for change {ch.number}: {result['error']}[/red]"
             _log.warning("submit failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
         else:
-            self.status_msg = f"[green]Change #{row} submitted[/green]"
+            self.status_msg = f"[green]Change {ch.number} submitted[/green]"
             _log.info("change submitted change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
-    def review_rebase(self, row: int) -> None:
-        ch = self.changes.at(row - 1)
+    def review_rebase(self, rows: Index) -> None:
+        for ch in self._resolve_index(rows):
+            self._review_rebase(ch)
 
-        if ch is None:
-            self.status_msg = f"[red]cannot find change for row #{row}[/red]"
-            return
-
+    def _review_rebase(self, ch: TrackedChange) -> None:
         if ch.current_revision is None:
-            self.status_msg = f"[red]cannot rebase change #{row} - no current revision known[/red]"
+            self.status_msg = f"[red]cannot rebase change {ch.number} - no current revision known[/red]"
             return
 
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
-            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{row}[/red]"
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
         result = gerrit.query_review_rebase(ch.current_revision, instance.host, instance.port)
 
         if "error" in result:
-            self.status_msg = f"[red]Rebase failed for change #{row}: {result['error']}[/red]"
+            self.status_msg = f"[red]Rebase failed for change {ch.number}: {result['error']}[/red]"
             _log.warning("rebase failed change=%s instance=%s error=%s", ch.number, ch.instance, result["error"])
         else:
-            self.status_msg = f"[green]Rebase triggered for change #{row}[/green]"
+            self.status_msg = f"[green]Rebase triggered for change {ch.number}[/green]"
             _log.info("rebase triggered change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
-    # --- Config methods ---
+    # --- Open WebUI ---
 
-    def reload_config(self, force: bool = False) -> bool:
-        """Check both files for changes and reload if needed. Returns True if either was reloaded."""
-        new_toml_mtime = self.config.mtime()
-        new_changes_mtime = self.changes.mtime()
+    def open_change_webui(self, rows: Index) -> None:
+        for ch in self._resolve_index(rows):
+            self._open_change_webui(ch)
 
-        if not force and new_toml_mtime <= self.config_mtime and new_changes_mtime <= self.changes_mtime:
-            return False
-        try:
-            self.config.load_config()
-            self.config_mtime = new_toml_mtime
-
-            self.changes.load_changes()
-            self.changes_mtime = new_changes_mtime
-
-            self._sync_cache_with_changes()
-
-            self.status_msg = "[green]Config reloaded[/green]"
-            _log.info("config reloaded instances=%d tracked=%d", len(self.config.instances), self.changes.count())
-            return True
-        except Exception as exc:
-            self.status_msg = f"[red]Config error: {exc}[/red]"
-            self.config_mtime = new_toml_mtime
-            self.changes_mtime = new_changes_mtime
-            _log.error("config reload failed: %s", exc)
-            return False
+    def _open_change_webui(self, ch: TrackedChange) -> None:
+        if ch.url:
+            webbrowser.open(ch.url)
+        else:
+            self.status_msg = f"[red]URL not found for change {ch.number}[/red]"
 
     # --- Editor methods ---
 
@@ -390,67 +380,29 @@ class App:
         header = build_header(ssh_requests=gerrit.ssh_request_count)
         table = build_table(
             self.changes,
-            self.config.path,
-            self.config.interval,
+            self.config,
             self.status_msg,
             gerrit.ssh_request_count,
             self.input.hints(),
         )
         return build_layout(header, table, prompt=prompt_msg)
 
-    def visual_update(self, live: Live) -> None:
-        live.update(self.build(self.input.prompt()))
+    def visual_update_if_needed(self, live: Live, force: bool = False) -> None:
+        if self.needs_visual_update:
+            live.update(self.build(self.input.prompt()))
+            self.needs_visual_update = False
 
     # --- AppContext interface (called by InputHandler) ---
 
-    def toggle_waiting(self, row: int) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
+    def toggle_waiting(self, rows: Index) -> None:
+        if rows.wildcard:
+            self.toggle_all_waiting()
 
+        for ch in rows.resolve(self.changes):
             ch.waiting = not ch.waiting
 
-            if ch.waiting:
-                self.status_msg = f"[yellow]#{row} marked as waiting[/yellow]"
-            else:
-                self.status_msg = f"[yellow]#{row} no longer waiting[/yellow]"
-
-        self.changes_mtime = self.changes.mtime()
-
-    def toggle_deleted(self, row: int) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
-
-            ch.deleted = not ch.deleted
-
-            if ch.deleted:
-                self.status_msg = f"[red]#{row} marked for deletion[/red]"
-            else:
-                self.status_msg = f"[green]#{row} restored[/green]"
-
-        self.changes_mtime = self.changes.mtime()
-
-    def toggle_disabled(self, row: int) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
-
-            ch.disabled = not ch.disabled
-
-            if ch.disabled:
-                self.status_msg = f"[yellow]#{row} disabled[/yellow]"
-            else:
-                self.status_msg = f"[green]#{row} re-enabled[/green]"
-
-        self.changes_mtime = self.changes.mtime()
-
     def toggle_all_waiting(self) -> None:
-        candidates = self.changes.get_active()
-        if not candidates:
+        if not (candidates := self.changes.get_active()):
             self.status_msg = "[dim]No active changes to toggle[/dim]"
             return
 
@@ -458,12 +410,28 @@ class App:
         for ch in candidates:
             ch.waiting = target
 
-        self.changes_mtime = self.changes.save_changes()
+    def toggle_deleted(self, rows: Index) -> None:
+        if rows.wildcard:
+            self.toggle_all_deleted()
 
-        if target:
-            self.status_msg = f"[yellow]All {len(candidates)} change(s) marked as waiting[/yellow]"
-        else:
-            self.status_msg = f"[yellow]All {len(candidates)} change(s) no longer waiting[/yellow]"
+        for ch in rows.resolve(self.changes):
+            ch.deleted = not ch.deleted
+
+    def toggle_all_deleted(self) -> None:
+        if not (candidates := self.changes.get_all()):
+            self.status_msg = "[dim]No active changes to toggle[/dim]"
+            return
+
+        target = not all(ch.deleted for ch in candidates)
+        for ch in candidates:
+            ch.deleted = target
+
+    def toggle_disabled(self, rows: Index) -> None:
+        if rows.wildcard:
+            self.toggle_all_disabled()
+
+        for ch in rows.resolve(self.changes):
+            ch.disabled = not ch.disabled
 
     def toggle_all_disabled(self) -> None:
         candidates = self.changes.get_active()
@@ -474,13 +442,6 @@ class App:
         target = not all(ch.disabled for ch in candidates)
         for ch in candidates:
             ch.disabled = target
-
-        self.changes_mtime = self.changes.save_changes()
-
-        if target:
-            self.status_msg = f"[yellow]All {len(candidates)} change(s) disabled[/yellow]"
-        else:
-            self.status_msg = f"[green]All {len(candidates)} change(s) re-enabled[/green]"
 
     def refresh_all(self) -> None:
         # I know this is not a obvious place for cleaning status msg but I want to have easy way for it
@@ -510,7 +471,6 @@ class App:
         new_change = TrackedChange(number=number, instance=instance)
         self.changes.append(new_change)
         self.status_msg = f"[green]Added {number} @ {instance}[/green]"
-        self.changes_mtime = self.changes.save_changes()
         _log.info("change added number=%d instance=%s", number, instance)
 
     def delete_all_submitted(self) -> None:
@@ -522,7 +482,6 @@ class App:
 
         if count > 0:
             self.status_msg = f"[red]{count} submitted change(s) marked for deletion[/red]"
-            self.changes_mtime = self.changes.save_changes()
         else:
             self.status_msg = "[dim]No submitted changes to delete[/dim]"
 
@@ -533,7 +492,6 @@ class App:
 
         if deleted_hashes > 0:
             self.status_msg = f"[red]{deleted_hashes} change(s) permanently removed[/red]"
-            self.changes_mtime = self.changes.save_changes()
         else:
             self.status_msg = "[dim]Nothing to purge[/dim]"
 
@@ -546,7 +504,6 @@ class App:
 
         if count > 0:
             self.status_msg = f"[green]{count} change(s) restored[/green]"
-            self.changes_mtime = self.changes.save_changes()
         else:
             self.status_msg = "[dim]Nothing to restore[/dim]"
 
@@ -593,64 +550,55 @@ class App:
 
         if added:
             self.status_msg = f"[green]Added {added} change(s)[/green]"
-            self.changes_mtime = self.changes.save_changes()
             self._start_refresh()
         else:
             self.status_msg = f"[dim] No new changes on {len(self.config.instances)} instances[/dim]"
 
     def quit(self) -> None:
         self.changes.remove_all_deleted()
-        self.changes_mtime = self.changes.save_changes()
-        self.exit_msg = f"{len(self.changes.get_all())} change(s) saved. Bye!"
-        _log.info("app quit tracked=%d", self.changes.count())
+        _log.info("app quit")
         self.running = False
 
     # --- Comments ---
 
-    def add_comment(self, row: int, text: str) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
+    def add_comment(self, rows: Index, text: str) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            self._add_comment(ch, text)
 
-            ch.comments.append(text)
+    def _add_comment(self, ch: TrackedChange, text: str) -> None:
+        ch.comments = [*ch.comments, text]
 
-    def replace_all_comments(self, row: int, text: str) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
+    def replace_all_comments(self, rows: Index, text: str) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            self._replace_all_comments(ch, text)
 
-            ch.comments = [text]
+    def _replace_all_comments(self, ch: TrackedChange, text: str) -> None:
+        ch.comments = [text]
 
-    def edit_last_comment(self, row: int, text: str) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
+    def edit_last_comment(self, rows: Index, text: str) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            self._edit_last_comment(ch, text)
 
-            if ch.comments:
-                ch.comments[-1] = text
+    def _edit_last_comment(self, ch: TrackedChange, text: str) -> None:
+        if ch.comments:
+            new = list(ch.comments)
+            new[-1] = text
+            ch.comments = new
 
-    def delete_comment(self, row: int, comment_idx: int) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
+    def delete_comment(self, rows: Index, comment_idx: Index) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            self._delete_comment(ch, comment_idx)
 
-            array_idx = comment_idx - 1
-            if 0 <= array_idx < len(ch.comments):
-                ch.comments.pop(array_idx)
-            else:
-                self.status_msg = f"[red]No comment at index {comment_idx}[/red]"
+    def _delete_comment(self, ch: TrackedChange, comment_idx: Index) -> None:
+        if comment_idx.wildcard:
+            ch.comments = []
+            return
 
-    def delete_all_comments(self, row: int) -> None:
-        with self.changes.edit_change(row - 1) as ch:
-            if ch is None:
-                self.status_msg = f"[red]no change at index {row}[/red]"
-                return
-
-            ch.comments.clear()
+        new = list(ch.comments)
+        for idx in sorted([i - 1 for i in comment_idx.values], reverse=True):
+            if 0 <= idx < len(new):
+                new.pop(idx)
+        ch.comments = new
 
     # --- Threading ---
 
@@ -683,20 +631,27 @@ class App:
             self.seconds_since_refresh = 0.0
             Thread(target=self._bg_refresh, daemon=True).start()
 
-    # --- Open WebUI ---
+    # --- Config methods ---
 
-    def open_change_webui(self, row: int) -> None:
-        ch = self.changes.at(row - 1)
+    def reload_config(self, force: bool = False) -> bool:
+        """Check both files for changes and reload if needed. Returns True if either was reloaded."""
+        self.cache.save_file()
+        self.changes.save_changes()
 
-        if not ch:
-            self.status_msg = f"[red]cannot open change #{row}[/red]"
-            return
+        if not force and not self.config.is_file_changed() and not self.changes.is_file_changed():
+            return False
+        try:
+            self.config.load_config()
+            self.changes.load_changes()
+            self._sync_cache_with_changes()
 
-        if ch.url:
-            webbrowser.open(ch.url)
-            self.status_msg = f"[green]opened change #{row} in browser[/green]"
-        else:
-            self.status_msg = f"[red]URL not found for change #{row}[/red]"
+            self.status_msg = "[green]Config reloaded[/green]"
+            _log.info("config reloaded instances=%d tracked=%d", len(self.config.instances), self.changes.count())
+            return True
+        except Exception as exc:
+            self.status_msg = f"[red]Config error: {exc}[/red]"
+            _log.error("config reload failed: %s", exc)
+            return False
 
     # --- Main loop ---
 
@@ -718,54 +673,55 @@ class App:
                 while self.running:
                     time.sleep(self.config.ui_refresh_interval_sec)
                     self.seconds_since_refresh += self.config.ui_refresh_interval_sec
-                    needs_visual_update = False
 
                     # Check if background refresh just completed
                     if self.refresh_pending and self.refresh_done.is_set():
                         self.refresh_pending = False
-                        needs_visual_update = True
+                        self.needs_visual_update = True
 
-                    # Process all pending keys
-                    while True:
-                        try:
-                            key = self.key_queue.get_nowait()
-                        except Empty:
-                            break
-                        self.input.handle_key(key)
-                        if not self.running:
-                            break
-
-                        needs_visual_update = True
+                    self._check_pending_input()
 
                     if not self.running:
-                        break
+                        return
 
-                    if self.pending_editor:
-                        target = self.pending_editor
-                        self.pending_editor = None
-
-                        live.stop()
-                        try:
-                            self._run_editor(target)
-                            self.reload_config(force=True)
-                        finally:
-                            live.start()
-                        needs_visual_update = True
+                    self._check_pending_editor(live)
 
                     if self.reload_config():
                         self._start_refresh()
-                        self.visual_update(live)
-                        needs_visual_update = False
-
+                        self.needs_visual_update = True
                     elif self.seconds_since_refresh >= self.config.interval:
                         self.status_msg = ""
                         self._start_refresh()
-                        self.visual_update(live)
-                        needs_visual_update = False
-                    elif needs_visual_update:
-                        self.visual_update(live)
-                        needs_visual_update = False
+                        self.needs_visual_update = True
+
+                    self.visual_update_if_needed(live)
+
         except KeyboardInterrupt:
             pass
         finally:
-            _console.print(f"\n[dim]Stopped. {self.exit_msg}[/dim]")
+            self.changes.save_changes()
+            _console.print(f"\n[dim]Stopped. {self.exit_msg} {self.changes.count()} change(s) saved. Bye![/dim]")
+
+    def _check_pending_input(self) -> None:
+        while True:
+            try:
+                key = self.key_queue.get_nowait()
+            except Empty:
+                break
+            self.input.handle_key(key)
+            self.needs_visual_update = True
+            if not self.running:
+                break
+
+    def _check_pending_editor(self, live: Live) -> None:
+        if self.pending_editor:
+            target = self.pending_editor
+            self.pending_editor = None
+
+            live.stop()
+            try:
+                self._run_editor(target)
+                self.reload_config(force=True)
+            finally:
+                live.start()
+            self.needs_visual_update = True

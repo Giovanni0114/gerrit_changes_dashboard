@@ -15,13 +15,13 @@ def add_change(app_ctx: AppContext, ctx: Context) -> None:
     raw_number = ctx["number"]
     raw_instance = ctx["instance"]
 
-    if not raw_number.isdigit() or int(raw_number) == 0:
+    if not raw_number.isdigit():
         app_ctx.status_msg = f'[red]Invalid change number: "{raw_number}"[/red]'
         return
 
     number = int(raw_number)
 
-    if raw_instance == "":
+    if not raw_instance:
         instance = app_ctx.config.default_instance.name
     elif raw_instance.isdigit():
         idx = int(raw_instance)
@@ -32,92 +32,59 @@ def add_change(app_ctx: AppContext, ctx: Context) -> None:
     else:
         instance = raw_instance
 
-    if not instance:
-        app_ctx.status_msg = "[red]No instance specified[/red]"
-        return
-
     app_ctx.add_change(number, instance)
 
 
 def toggle_waiting(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    if idx == "a":
-        app_ctx.toggle_all_waiting()
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
         return
 
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.toggle_waiting(i)
+    app_ctx.toggle_waiting(idx)
 
 
 def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    if idx == "a":
-        app_ctx.delete_all_submitted()
-        return
-
-    if idx == "x":
+    if ctx["idx"] == "x":
         app_ctx.purge_deleted()
         return
 
-    if idx == "r":
+    if ctx["idx"] == "r":
         app_ctx.restore_all()
         return
 
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
+    if ctx["idx"] == "c":
+        app_ctx.delete_all_submitted()
         return
 
-    for i in indexes:
-        app_ctx.toggle_deleted(i)
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.toggle_deleted(idx)
 
 
 def toggle_disable(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    if idx == "a":
-        app_ctx.toggle_all_disabled()
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
         return
 
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
-        return
-
-    for i in indexes:
-        app_ctx.toggle_disabled(i)
+    app_ctx.toggle_disabled(idx)
 
 
 def open_change(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
         return
 
-    for i in indexes:
-        app_ctx.open_change_webui(i)
+    app_ctx.open_change_webui(idx)
 
 
 def set_automerge(app_ctx: AppContext, ctx: Context) -> None:
-    idx = ctx["idx"]
-
-    indexes = parse_idx_notation(idx, len(app_ctx.changes))
-
-    if indexes is None:
-        app_ctx.status_msg = f"[red]Invalid idx: {idx} [/red]"
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
         return
 
-    for i in indexes:
-        app_ctx.set_automerge(i)
+    app_ctx.review_set_automerge(idx)
 
 
 def open_config_in_editor(app_ctx: AppContext, ctx: Context) -> None:
@@ -137,59 +104,94 @@ def fetch_my_changes(app_ctx: AppContext, ctx: Context) -> None:
 
 def comment_add(app_ctx: AppContext, ctx: Context) -> None:
     """Add a comment to a change."""
-    app_ctx.add_comment(int(ctx["idx"]), ctx["text"])
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.add_comment(idx, ctx["text"])
 
 
 def comment_replace_all(app_ctx: AppContext, ctx: Context) -> None:
     """Replace all comments with a single new comment."""
-    app_ctx.replace_all_comments(int(ctx["idx"]), ctx["text"])
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.replace_all_comments(idx, ctx["text"])
 
 
 def comment_edit_last(app_ctx: AppContext, ctx: Context) -> None:
     """Edit the last comment on a change."""
-    app_ctx.edit_last_comment(int(ctx["idx"]), ctx["text"])
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.edit_last_comment(idx, ctx["text"])
 
 
 def comment_delete(app_ctx: AppContext, ctx: Context) -> None:
     """Delete a comment or all comments."""
-    cidx = ctx["comment_idx"]
-    row = int(ctx["idx"])
-    if cidx == "a":
-        app_ctx.delete_all_comments(row)
-    else:
-        app_ctx.delete_comment(row, int(cidx))
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    if (cidx := parse_idx_notation(ctx["comment_idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid comment idx parsed from: {ctx['comment_idx']}[/red]"
+        return
+
+    app_ctx.delete_comment(idx, cidx)
 
 
 def review_abandon_action(app_ctx: AppContext, ctx: Context) -> None:
     if ctx.get("confirm") != "y":
         app_ctx.status_msg = "[yellow]Abandon cancelled[/yellow]"
         return
-    app_ctx.review_abandon(int(ctx["idx"]))
+
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.review_abandon(idx)
 
 
 def review_rebase_action(app_ctx: AppContext, ctx: Context) -> None:
-    app_ctx.review_rebase(int(ctx["idx"]))
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.review_rebase(idx)
 
 
 def review_restore_action(app_ctx: AppContext, ctx: Context) -> None:
-    app_ctx.review_restore(int(ctx["idx"]))
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.review_restore(idx)
 
 
 def review_submit_action(app_ctx: AppContext, ctx: Context) -> None:
-    if ctx.get("confirm") != "y":
+    if not (confirm := ctx.get("confirm")) or confirm.lower() != "y":
         app_ctx.status_msg = "[yellow]Submit cancelled[/yellow]"
         return
-    app_ctx.review_submit(int(ctx["idx"]))
+
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.review_submit(idx)
 
 
 def review_code_review_action(app_ctx: AppContext, ctx: Context) -> None:
-    raw = ctx["score"].strip()
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    raw = ctx.get("score", "")
     try:
         score = int(raw)
     except ValueError:
         app_ctx.status_msg = f"[red]Invalid score: {raw}[/red]"
         return
-    if score < -2 or score > 2:
-        app_ctx.status_msg = f"[red]Score out of range: {score}[/red]"
-        return
-    app_ctx.review_code_review(int(ctx["idx"]), score)
+
+    app_ctx.review_code_review(idx, score)
