@@ -52,7 +52,7 @@ def handle_deletion(app_ctx: AppContext, ctx: Context) -> None:
         app_ctx.restore_all()
         return
 
-    if ctx["idx"] == "c":
+    if ctx["idx"] == "s":
         app_ctx.delete_all_submitted()
         return
 

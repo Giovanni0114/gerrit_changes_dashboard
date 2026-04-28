@@ -100,7 +100,7 @@ REVIEW_ACTIONS: dict[str, LeafAction] = {
 LEADER_ACTIONS: dict[str, LeafAction] = {
     "w": LeafAction(toggle_waiting, [input_idx_factory()], "Toggle waiting"),
     "d": LeafAction(toggle_disable, [input_idx_factory()], "Toggle disabled"),
-    "x": LeafAction(handle_deletion, [input_idx_factory({"x", "a"})], "Toggle deletion"),
+    "x": LeafAction(handle_deletion, [input_idx_factory({"x", "a", "s"})], "Toggle deletion"),
     "o": LeafAction(open_change, [input_idx_factory()], "Open change"),
     "c": LeafAction(None, [], "Comment"),  # submenu
     "r": LeafAction(None, [], "Review"),  # submenu
