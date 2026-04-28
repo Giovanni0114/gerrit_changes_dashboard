@@ -5,7 +5,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty, Queue
-from threading import Event, Lock, Thread
+from threading import Event, Thread
 from typing import Literal
 
 from rich.console import Console, Group
@@ -22,7 +22,7 @@ from gerrit import is_submitted, query_approvals, query_open_changes
 from input_handler import InputHandler
 from logs import app_logger
 from models import ApprovalEntry, GerritInstance, Index, TrackedChange
-from utils import Arrow, AtomicCounter, NoEcho
+from utils import Arrow, NoEcho
 
 _console = Console()
 _log = app_logger()
@@ -78,8 +78,6 @@ class App:
         self.refresh_done.set()
         self.refresh_pending: bool = False
         self.seconds_since_refresh: float = 0.0
-        self.manual_refresh_lock = Lock()
-        self.manual_refresh_counter = AtomicCounter()
         self.pending_editor: EditorTarget | None = None
         self._pause_keys = Event()
 
@@ -384,7 +382,7 @@ class App:
             self.status_msg,
             gerrit.ssh_request_count,
             self.input.hints(),
-            self.input.selected_rows()
+            self.input.selected_rows(),
         )
         return build_layout(header, table, prompt=prompt_msg)
 
@@ -446,27 +444,14 @@ class App:
 
     def refresh_all(self) -> None:
         # I know this is not a obvious place for cleaning status msg but I want to have easy way for it
+        # TODO: will have to create a more sophisticated way of hadling the status msg
+        # something like:
+        # self.status.append(StatusLevel.INFO, "Something happened")
+        # self.status.append(StatusLevel.WARN, "You did something wrong")
+        # self.status.append(StatusLevel.ERROR, "")
         self.status_msg = ""
 
-        if self.manual_refresh_counter.value() >= 5:
-            self.status_msg = "[red]Manual refresh limit reached[/red]"
-            return
-
-        self.manual_refresh_counter.increment()
-
-        if not self.manual_refresh_lock.locked():
-            self._process_refresh_queue()
-
-    def _process_refresh_queue(self) -> None:
-        with self.manual_refresh_lock:
-            while self.manual_refresh_counter.value() > 0:
-                self.manual_refresh_counter.decrement()
-                try:
-                    self._start_refresh()
-                except Exception as ex:
-                    self.status_msg = f"[red]Error on manual refresh {ex} [/red]"
-                    self.manual_refresh_counter.reset()
-                    return
+        self._start_refresh()
 
     def add_change(self, number: int, instance: str) -> None:
         new_change = TrackedChange(number=number, instance=instance)
