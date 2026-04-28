@@ -647,6 +647,7 @@ class App:
         """Run initial queries, start threads, enter main loop."""
         self.query_active_changes()
         self.query_disabled_once()
+        self.plugin_manager.init()
 
         reader_thread = Thread(target=self._key_reader, daemon=True)
         reader_thread.start()
@@ -688,6 +689,7 @@ class App:
             pass
         finally:
             self.changes.save_changes()
+            self.plugin_manager.shutdown()
             _console.print(f"\n[dim]Stopped. {self.exit_msg} {self.changes.count()} change(s) saved. Bye![/dim]")
 
     def _check_pending_input(self) -> None:

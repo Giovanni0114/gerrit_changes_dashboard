@@ -29,6 +29,7 @@ def _build(name: str, log_dir: Path, filename: str) -> logging.Logger:
     )
     handler.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATEFMT))
     logger.addHandler(handler)
+    logger.info("------------------ START --------------------")
     return logger
 
 

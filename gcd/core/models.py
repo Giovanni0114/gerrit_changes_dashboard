@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 from gcd.core.logs import plugin_logger
 
 if TYPE_CHECKING:
     from gcd.core import changes, config
+
+Context = dict[str, str]
 
 
 @dataclass
@@ -24,6 +27,7 @@ class GerritInstance:
     host: str
     port: int
     email: str | None
+    enabled_plugins: list[str] = field(default_factory=list)
 
 
 _TRACKED = frozenset(
@@ -37,10 +41,16 @@ _TRACKED = frozenset(
 _SENTINEL = object()
 
 
+@dataclass(frozen=True)
+class ChangeIdentifier:
+    number: int
+    instance: str
+
+
 @dataclass
 class TrackedChange:
     number: int
-    instance: str = "default"
+    instance: str
 
     comments: list[str] = field(default_factory=list)
     approvals: list[ApprovalEntry] = field(default_factory=list)
@@ -56,9 +66,13 @@ class TrackedChange:
     url: str | None = None
     current_revision: str | None = None
     error: str | None = None
-    _snapshot: frozenset[tuple[str, str, str]] = field(default_factory=frozenset, repr=False, compare=False)
+    _snapshot: frozenset[tuple[str, str, str]] = field(default_factory=frozenset, repr=True, compare=True)
 
     modified: bool = field(default=False, init=False)
+
+    @property
+    def id(self) -> ChangeIdentifier:
+        return ChangeIdentifier(self.number, self.instance)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "modified", False)
@@ -145,28 +159,37 @@ class AppContext(Protocol):
 
 class BasePlugin(ABC):
     name: str = "base"
-    version: str = "0.1.0"
+    version: str = "0.0.0"
 
-    def __init__(self, enabled: bool):
-        self.enabled = enabled
-        self._logger = plugin_logger(self.name)
+    def __init__(self, ctx: AppContext):
+        self.enabled = True
+        self.log = plugin_logger(self.name)
 
-        self.log(f"plugin initialized with version={self.version} enabled={self.enabled}")
-
-    def log(self, msg: str) -> None:
-        self._logger.info(msg)
+        self.log.info(f"plugin initialized version={self.version}")
 
     def metadata(self) -> dict[str, str]:
         return {"name": f"{self.name}:{self.version}"}
 
     @abstractmethod
-    def setup(self, ctx: AppContext) -> None: ...
+    def setup(self) -> None: ...
 
     @abstractmethod
-    def on_exit(self, ctx: AppContext) -> None: ...
+    def on_exit(self) -> None: ...
 
     @abstractmethod
-    def on_init(self, ctx: AppContext) -> None: ...
+    def on_init(self) -> None: ...
 
     @abstractmethod
-    def on_activate(self, ctx: AppContext) -> None: ...
+    def on_activate(self) -> None: ...
+
+    def on_new_change(self, change_id: ChangeIdentifier) -> None:
+        self.log.info("new_change event handler not implemented")
+
+    def on_new_comment(self, change_id: ChangeIdentifier, new_comments: list[str]) -> None:
+        self.log.info("new_comment event handler not implemented")
+
+    def on_new_approval(self, change_id: ChangeIdentifier, new_approvals: list[ApprovalEntry]) -> None:
+        self.log.info("new_approval event handler not implemented")
+
+
+PluginEvent = Literal["new_change", "new_comment", "new_approval"]
