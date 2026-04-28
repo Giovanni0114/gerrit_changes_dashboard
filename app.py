@@ -384,6 +384,7 @@ class App:
             self.status_msg,
             gerrit.ssh_request_count,
             self.input.hints(),
+            self.input.selected_rows()
         )
         return build_layout(header, table, prompt=prompt_msg)
 

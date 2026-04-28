@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from models import AppContext
+from models import AppContext, Index
 from utils import Arrow
 
 from .context_actions import (
@@ -158,6 +158,7 @@ class InputHandler:
         self.current_field: InputField | None = None
         self.context: dict[str, str] = {}
         self.current_action: LeafAction | None = None
+        self.current_index: Index | None = None
 
     def hints(self) -> str:
         """Return keyboard shortcut hints for the current input state."""
@@ -209,6 +210,8 @@ class InputHandler:
             completed = self._handle_input(key)
             if completed:
                 self._try_execute()
+            elif self.current_field.name == "idx":
+                self.current_index = parse_idx_notation(self.input or "")
             return
 
         if not key_allowed_in_sequence(key, self.sequence):
@@ -259,7 +262,7 @@ class InputHandler:
                 self.reset()
                 return None
 
-            change = self.app_context.changes.at(list(idx.values)[0] - 1)
+            change = self.app_context.changes.at(next(iter(idx.values)) - 1)
 
             if not change or not change.comments:
                 self.app_context.status_msg = "[red]No comments to edit[/red]"
@@ -275,6 +278,7 @@ class InputHandler:
         self.sequence = []
         self.context = {}
         self.current_action = None
+        self.current_index = None
 
     def _handle_input(self, key: str) -> bool:
         """Process a key while in input mode. Returns True if the field is now complete."""
@@ -300,7 +304,14 @@ class InputHandler:
             return False
 
         self.input = (self.input or "") + key
+
+        if self.current_field.name == "idx":
+            self.current_index = parse_idx_notation(self.input or "")
+
         return False
 
-    def selected_rows(self) -> set[int]:
-        pass
+    def selected_rows(self) -> frozenset[int]:
+        if not self.current_index:
+            return set()
+
+        return self.current_index.values
