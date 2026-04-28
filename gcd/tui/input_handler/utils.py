@@ -44,7 +44,7 @@ def parse_idx_notation(raw: str) -> Index | None:
     result: set[int] = set()
     for part in stripped.split(","):
         if not part:
-            return None
+            continue
         if "-" in part:
             pieces = part.split("-")
             if len(pieces) != 2 or not pieces[0].isnumeric() or not pieces[1].isnumeric():
