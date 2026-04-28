@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from gcd.core.logs import plugin_logger
 
 if TYPE_CHECKING:
     from gcd.core import changes, config
@@ -138,3 +141,32 @@ class AppContext(Protocol):
     def edit_last_comment(self, row: Index, text: str) -> None: ...
     def delete_comment(self, row: Index, comment_idx: Index) -> None: ...
     def delete_all_comments(self, row: Index) -> None: ...
+
+
+class BasePlugin(ABC):
+    name: str = "base"
+    version: str = "0.1.0"
+
+    def __init__(self, enabled: bool):
+        self.enabled = enabled
+        self._logger = plugin_logger(self.name)
+
+        self.log(f"plugin initialized with version={self.version} enabled={self.enabled}")
+
+    def log(self, msg: str) -> None:
+        self._logger.info(msg)
+
+    def metadata(self) -> dict[str, str]:
+        return {"name": f"{self.name}:{self.version}"}
+
+    @abstractmethod
+    def setup(self, ctx: AppContext) -> None: ...
+
+    @abstractmethod
+    def on_exit(self, ctx: AppContext) -> None: ...
+
+    @abstractmethod
+    def on_init(self, ctx: AppContext) -> None: ...
+
+    @abstractmethod
+    def on_activate(self, ctx: AppContext) -> None: ...
