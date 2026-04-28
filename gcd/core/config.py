@@ -4,12 +4,15 @@ from enum import Enum
 from pathlib import Path
 
 from gcd.core.models import GerritInstance
+from gcd.core.logs import app_logger
 
 DEFAULT_INTERVAL = 30
 DEFAULT_REFRESH_RATE = 20
 DEFAULT_CHANGES_FILENAME = "changes.json"
 DEFAULT_CACHE_FILENAME = "cache.json"
 DEFAULT_LOG_DIRNAME = "log"
+
+_logger = app_logger()
 
 
 class Layout(Enum):
@@ -111,10 +114,19 @@ class AppConfig:
         default_host = config_data.get("default_host")
         default_port = config_data.get("default_port")
         default_email = config_data.get("default_email")
+        default_plugins_enabled = config_data.get("default_plugins_enabled", [])
+
+        _logger.info("default_plugins_enabled: %s", default_plugins_enabled)
 
         if default_host and default_port:
             self._instances.append(
-                GerritInstance(name="default", host=default_host, port=default_port, email=default_email)
+                GerritInstance(
+                    name="default",
+                    host=default_host,
+                    port=default_port,
+                    email=default_email,
+                    enabled_plugins=default_plugins_enabled,
+                )
             )
 
         for ins_name in data.get("instance", {}):
@@ -122,9 +134,15 @@ class AppConfig:
             host = ins.get("host") or default_host
             port = ins.get("port") or default_port
             email = ins.get("email") or default_email
+            enabled_plugins = ins.get("plugins_enabled") or default_plugins_enabled
+
+            if enabled_plugins and not isinstance(enabled_plugins, list):
+                raise ValueError(f"plugins_enabled for instance {ins_name} must be a list")
 
             if host and port:
-                self._instances.append(GerritInstance(name=ins_name, host=host, port=port, email=email))
+                self._instances.append(
+                    GerritInstance(name=ins_name, host=host, port=port, email=email, enabled_plugins=enabled_plugins)
+                )
 
         if len(self._instances) == 0:
             raise ValueError("No Gerrit instances configured. Please specify at least one instance in the config file.")
@@ -179,33 +197,37 @@ class AppConfig:
         # footnote += f" | [dim]layout[/dim]: {self.layout.name}"
         return footnote
 
+    def get_all_enabled_plugins(self) -> set[str]:
+        enabled_plugins = set()
+        for ins in self._instances:
+            enabled_plugins.update(ins.enabled_plugins)
+
+        return enabled_plugins
+
 
 def generate_example_config(path: Path) -> None:
     if path.exists():
+        print(f"Config file already exists at {path}, not overwriting.")
         return
     content = (
-        "# Gerrit Changes Dashboard settings\n"
         "[config]\n"
         'default_host = "gerrit.example.com"\n'
         "default_port = 22\n"
+        '# default_email = "you@example.com"\n'
+        "# default_plugins_enabled = []\n"
+        "\n"
         f'# default_layout = "{Layout.DEFAULT.value}"  # one of: {", ".join(layout.value for layout in Layout)}\n'
+        '# editor = "vim"\n'
         "# interval = 30\n"
         "# ui_refresh_rate = 20 \n"
-        '# changes_file = "./changes.json"  # path relative to this file\n'
-        '# cache_file = "./cache.json"  # SSH data cache, path relative to this file\n'
-        '# log_dir = "./log"  # path relative to this file; created if missing\n'
-        '# default_email = "you@example.com"  # falls back to git config user.email\n'
-        '# editor = "vim"  # falls back to env EDITOR\n'
+        '# changes_file = "./changes.json"\n'
+        '# cache_file = "./cache.json"\n'
+        '# log_dir = "./log"\n'
         "\n"
-        "# if you have multiple gerrit instances, you can specify them here.\n"
-        "# If default_host/default_port are set, they will be used as instance named 'default'\n"
-        "# Also, default_* values will be used as defaults for each instance.\n"
-        "# Instances must have different names.\n"
-        "\n"
-        "# If default values are not specified, first instance is used as default.\n"
-        "# [instance.default]\n"
+        "# [instance.test]\n"
         '# host = "localhost"\n'
-        "# port = 29418\n"
-        '# email = ""\n'
+        "# port = 22\n"
+        '# email = "you@example.com"\n'
+        "# plugins_enabled = []\n"
     )
     path.write_text(content, encoding="utf-8")

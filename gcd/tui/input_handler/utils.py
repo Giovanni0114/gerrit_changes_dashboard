@@ -3,12 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from gcd.core.models import AppContext, Index
+from gcd.core.models import AppContext, Index, Context
 
 if TYPE_CHECKING:
     from .input_engine import LeafAction
-
-Context = dict[str, str]
 
 
 @dataclass(frozen=True)
