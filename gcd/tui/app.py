@@ -11,18 +11,18 @@ from typing import Literal
 from rich.console import Console, Group
 from rich.live import Live
 
-import gerrit
-from cache import SshCache
-from changes import Changes
-from config import (
+from gcd.core import gerrit
+from gcd.core.cache import SshCache
+from gcd.core.changes import Changes
+from gcd.core.config import (
     AppConfig,
 )
-from display import build_header, build_layout, build_table
-from gerrit import is_submitted, query_approvals, query_open_changes
-from input_handler import InputHandler
-from logs import app_logger
-from models import ApprovalEntry, GerritInstance, Index, TrackedChange
-from utils import Arrow, NoEcho
+from gcd.core.gerrit import is_submitted, query_approvals, query_open_changes
+from gcd.core.logs import app_logger
+from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
+from gcd.core.utils import Arrow, NoEcho
+from gcd.tui.display import build_header, build_layout, build_table
+from gcd.tui.input_handler import InputHandler
 
 _console = Console()
 _log = app_logger()
@@ -711,3 +711,60 @@ class App:
             finally:
                 live.start()
             self.needs_visual_update = True
+
+
+def main() -> None:
+    import argparse
+    import sys
+
+    from gcd.core.config import generate_example_config
+    from gcd.core.logs import setup_logging
+
+    parser = argparse.ArgumentParser(
+        description="Gerrit Changes Dashboard",
+    )
+
+    parser.add_argument(
+        "config",
+        nargs="?",
+        default="config.toml",
+        help="Path to TOML config file (default: config.toml)",
+    )
+
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Generate example config.toml, then exit",
+    )
+
+    parser.add_argument(
+        "--clear-cache",
+        action="store_true",
+        help="Delete the SSH data cache file before starting",
+    )
+
+    args = parser.parse_args()
+    config_path = Path(args.config)
+
+    if args.init:
+        generate_example_config(config_path)
+        print(f"Created {config_path} - edit it and run again.")
+        sys.exit(0)
+
+    if not config_path.exists():
+        print(f"Config file not found: {config_path}")
+        print("Run with --init to generate an example, or create it manually.")
+        sys.exit(1)
+
+    config = AppConfig(config_path)
+
+    if args.clear_cache:
+        config.cache_path.unlink(missing_ok=True)
+        print(f"Cleared cache: {config.cache_path}")
+
+    log_path = setup_logging(config.log_path)
+    app_logger().info("startup config=%s logs=%s", config_path, log_path)
+
+    with NoEcho():
+        app = App(config)
+        app.run()

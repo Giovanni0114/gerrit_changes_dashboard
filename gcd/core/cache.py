@@ -2,8 +2,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from logs import app_logger
-from models import ApprovalEntry, TrackedChange
+from gcd.core.logs import app_logger
+from gcd.core.models import ApprovalEntry, TrackedChange
 
 _log = app_logger()
 

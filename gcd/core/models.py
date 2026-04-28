@@ -5,8 +5,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    import changes
-    import config
+    from gcd.core import changes, config
 
 
 @dataclass

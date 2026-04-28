@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from models import AppContext, Index
-from utils import Arrow
+from gcd.core.models import AppContext, Index
+from gcd.core.utils import Arrow
 
 from .context_actions import (
     add_change,

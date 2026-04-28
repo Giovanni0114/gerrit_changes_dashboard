@@ -6,6 +6,7 @@
 
 > [!IMPORTANT]
 > NEVER PUSH. Prefer amending a few commits over creating many with similar names.
+> In terms of amend, prefer --no-edit.
 
 ## Project Overview
 
@@ -14,10 +15,10 @@ Gerrit queries (`ssh <host> gerrit query --format=json <hash>`).
 
 Two config files:
 - `config.toml` — app settings (read-only at runtime, managed by `config.py::AppConfig`)
-- `changes.json` — tracked changes (managed by `changes.py::Changes`, mutated only
-  through the TUI via `edit_change()` / `edit_changes()` context managers, which
-  auto-save). Manual editing works as a fallback. Both files are watched via mtime
-  polling; external edits auto-reload.
+- `changes.json` — tracked changes (managed by `changes.py::Changes`, mutated
+through the TUI. Manual editing works as a fallback.
+
+Both files are watched via mtime polling; external edits auto-reload.
 
 ## Project Management (`pm/` worktree)
 
@@ -28,8 +29,7 @@ notes live there and are version-controlled on `pm`, not `main`.
   folder layout).
 - Notes and scratch thinking go in `pm/notes/`.
 - Commit spec changes on the `pm` branch (from inside `pm/`), not on feature branches.
-- Never `git add -f` anything under `pm/`. Never `rm -rf pm/` — use
-  `git worktree remove pm` if needed.
+- Never `git add -f` anything under `pm/`. Never `rm -rf pm/`.
 
 Before implementing a feature: read its `spec.md` (and the parent EPIC's `spec.md`
 if applicable) and `test-cases.md`. Resolve open questions with the user before
@@ -46,8 +46,10 @@ uv sync
 uv sync --dev
 uv run ruff check . --fix && uv run ruff format .
 uv run pytest
-python3 gerrit_changes_dashboard.py
-python3 gerrit_changes_dashboard.py --init # generate example config
+python3 gerrit_changes_dashboard.py              # legacy shim
+python3 gerrit_changes_dashboard.py --init       # generate example config
+uv run gcd                                 # via entry point
+uv run gcd --init                          # generate example config
 ```
 
 > [!IMPORTANT]

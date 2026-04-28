@@ -3,7 +3,7 @@ import subprocess
 import threading
 import time
 
-from logs import ssh_logger
+from gcd.core.logs import ssh_logger
 
 _ssh_lock = threading.Lock()
 ssh_request_count: int = 0

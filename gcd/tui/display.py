@@ -6,9 +6,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from changes import Changes
-from config import AppConfig
-from models import ApprovalEntry, TrackedChange
+from gcd.core.changes import Changes
+from gcd.core.config import AppConfig
+from gcd.core.models import ApprovalEntry, TrackedChange
 
 
 def get_approvals_list(ch: TrackedChange) -> list[ApprovalEntry]:
@@ -97,7 +97,6 @@ def build_table(
             "row": "",
             "comments": "",
         }
-
 
         if ch.url:
             styles["number"] += f" link {ch.url}"

@@ -1,4 +1,4 @@
-from models import AppContext
+from gcd.core.models import AppContext
 
 from .utils import Context, parse_idx_notation
 

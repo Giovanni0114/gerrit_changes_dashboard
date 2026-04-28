@@ -4,7 +4,7 @@ import tomllib
 from functools import lru_cache
 from pathlib import Path
 
-from models import GerritInstance
+from gcd.core.models import GerritInstance
 
 DEFAULT_INTERVAL = 30
 DEFAULT_REFRESH_RATE = 20
