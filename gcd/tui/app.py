@@ -18,6 +18,7 @@ from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
 from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
+from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
 from gcd.tui.display import build_footer, build_header, build_layout, build_table
 from gcd.tui.input_handler import InputHandler
@@ -89,6 +90,7 @@ class App:
         self.changes = Changes(self.config.changes_path)
         self.cache = SshCache(self.config.cache_path)
         self.gerrit_comm = GerritCommunication()
+        self.plugin_manager = PluginManager(self)
 
         self.status_msg: str = ""
         self.exit_msg: str = ""
@@ -106,13 +108,13 @@ class App:
 
         self._sync_cache_with_changes()
 
+
         _log.info(
-            "app init config=%s changes=%s cache=%s instances=%d tracked=%d",
-            self.config.path,
-            self.changes.path,
+            "app init config=%s instances=%d tracked=%d plugins=%d",
             self.config.cache_path,
             len(self.config.instances),
             self.changes.count(),
+            len(self.plugin_manager.plugins)
         )
 
     def _sync_cache_with_changes(self) -> None:
