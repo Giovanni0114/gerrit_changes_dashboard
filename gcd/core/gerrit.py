@@ -289,7 +289,7 @@ def query_approvals(query_id: str, host: str, port: int | None = None) -> dict:
     cmd = ["ssh", "-x"]
     if port is not None:
         cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "query", "--format=json", "--all-approvals", query_id]
+    cmd += [host, "gerrit", "query", "--format=json", "--current-patch-set", query_id]
 
     start = time.monotonic()
     endpoint = _endpoint(host, port)

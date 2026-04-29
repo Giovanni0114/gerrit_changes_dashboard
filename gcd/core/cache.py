@@ -14,6 +14,7 @@ class CacheEntry:
     project: str | None = None
     url: str | None = None
     current_revision: str | None = None
+    current_patchset_number: int | None = None
     submitted: bool = False
     approvals: list[ApprovalEntry] = field(default_factory=list)
 
@@ -24,6 +25,7 @@ class CacheEntry:
             project=ch.project,
             url=ch.url,
             current_revision=ch.current_revision,
+            current_patchset_number=ch.current_patchset_number,
             submitted=ch.submitted,
             approvals=list(ch.approvals),
         )
@@ -34,6 +36,7 @@ class CacheEntry:
             "project": self.project,
             "url": self.url,
             "current_revision": self.current_revision,
+            "current_patchset_number": self.current_patchset_number,
             "submitted": self.submitted,
             "approvals": [{"label": a.label, "value": a.value, "by": a.by} for a in self.approvals],
         }
@@ -50,6 +53,7 @@ class CacheEntry:
             project=data.get("project"),
             url=data.get("url"),
             current_revision=data.get("current_revision"),
+            current_patchset_number=data.get("current_patchset_number"),
             submitted=bool(data.get("submitted", False)),
             approvals=approvals,
         )
