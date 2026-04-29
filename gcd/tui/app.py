@@ -87,13 +87,12 @@ class App:
 
         self._sync_cache_with_changes()
 
-
         _log.info(
             "app init config=%s instances=%d tracked=%d plugins=%d",
             self.config.cache_path,
             len(self.config.instances),
             self.changes.count(),
-            len(self.plugin_manager.plugins)
+            len(self.plugin_manager.plugins),
         )
 
     def _sync_cache_with_changes(self) -> None:
@@ -553,6 +552,8 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._add_comment(ch, text)
 
+            self.plugin_manager.emit("new_comment", ch.instance, [ch.id, text])
+
     def _add_comment(self, ch: TrackedChange, text: str) -> None:
         ch.comments = [*ch.comments, text]
 
@@ -560,12 +561,16 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._replace_all_comments(ch, text)
 
+            self.plugin_manager.emit("new_comment", ch.instance, [ch.id, text])
+
     def _replace_all_comments(self, ch: TrackedChange, text: str) -> None:
         ch.comments = [text]
 
     def edit_last_comment(self, rows: Index, text: str) -> None:
         for ch in self._resolve_index_for_all(rows):
             self._edit_last_comment(ch, text)
+
+            self.plugin_manager.emit("new_comment", ch.instance, [ch.id, text])
 
     def _edit_last_comment(self, ch: TrackedChange, text: str) -> None:
         if ch.comments:

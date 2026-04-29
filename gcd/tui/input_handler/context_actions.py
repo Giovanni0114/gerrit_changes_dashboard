@@ -1,6 +1,6 @@
-from gcd.core.models import AppContext
+from gcd.core.models import AppContext, Context
 
-from .utils import Context, parse_idx_notation
+from .utils import parse_idx_notation
 
 
 def refresh(app_ctx: AppContext, ctx: Context) -> None:

@@ -1,4 +1,4 @@
-from gcd.core.models import AppContext, BasePlugin
+from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier
 
 
 class AuditPlugin(BasePlugin):
@@ -20,11 +20,11 @@ class AuditPlugin(BasePlugin):
     def on_new_change(self, change_id: ChangeIdentifier) -> None:
         self.log.info(f"on_new_change {change_id}")
 
-    def on_new_comment(self, change_id: ChangeIdentifier, new_comments: list[str]) -> None:
-        self.log.info(f"on_new_comment {change_id}, new comments: {new_comments}")
+    def on_new_comment(self, change_id: ChangeIdentifier, new_comment: str) -> None:
+        self.log.info(f"on_new_comment {change_id}, new comments: {new_comment}")
 
-    def on_new_approval(self, change_id: ChangeIdentifier, new_approvals: list[ApprovalEntry]) -> None:
-        self.log.info(f"on_new_approval {change_id}, new approvals: {new_approvals}")
+    def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
+        self.log.info(f"on_new_approval {change_id}, new approvals: {new_approval}")
 
 
 plugin_class = AuditPlugin

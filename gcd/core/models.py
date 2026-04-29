@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -163,6 +162,7 @@ class BasePlugin(ABC):
 
     def __init__(self, ctx: AppContext):
         self.enabled = True
+        self.ctx = ctx
         self.log = plugin_logger(self.name)
 
         self.log.info(f"plugin initialized version={self.version}")
@@ -182,14 +182,14 @@ class BasePlugin(ABC):
     @abstractmethod
     def on_activate(self) -> None: ...
 
-    def on_new_change(self, change_id: ChangeIdentifier) -> None:
-        self.log.info("new_change event handler not implemented")
-
-    def on_new_comment(self, change_id: ChangeIdentifier, new_comments: list[str]) -> None:
+    def on_new_comment(self, change_id: ChangeIdentifier, new_comment: str) -> None:
         self.log.info("new_comment event handler not implemented")
 
-    def on_new_approval(self, change_id: ChangeIdentifier, new_approvals: list[ApprovalEntry]) -> None:
+    def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
+        self.log.info("new_approval event handler not implemented")
+
+    def on_status_changed(self, change_id: ChangeIdentifier, new_status: tuple[str, bool]) -> None:
         self.log.info("new_approval event handler not implemented")
 
 
-PluginEvent = Literal["new_change", "new_comment", "new_approval"]
+PluginEvent = Literal["new_comment", "new_approval", "status_changed"]

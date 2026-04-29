@@ -1,4 +1,4 @@
-from gcd.core.models import AppContext, BasePlugin
+from gcd.core.models import BasePlugin
 
 
 class LoggerPlugin(BasePlugin):

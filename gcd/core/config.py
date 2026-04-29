@@ -4,8 +4,8 @@ import tomllib
 from functools import lru_cache
 from pathlib import Path
 
-from gcd.core.models import GerritInstance
 from gcd.core.logs import app_logger
+from gcd.core.models import GerritInstance
 
 DEFAULT_INTERVAL = 30
 DEFAULT_REFRESH_RATE = 20
@@ -119,7 +119,13 @@ class AppConfig:
 
         if default_host and default_port:
             self._instances.append(
-                GerritInstance(name="default", host=default_host, port=default_port, email=default_email, enabled_plugins=default_plugins_enabled)
+                GerritInstance(
+                    name="default",
+                    host=default_host,
+                    port=default_port,
+                    email=default_email,
+                    enabled_plugins=default_plugins_enabled,
+                )
             )
 
         for ins_name in data.get("instance", {}):
@@ -127,7 +133,7 @@ class AppConfig:
             host = ins.get("host") or default_host
             port = ins.get("port") or default_port
             email = ins.get("email") or default_email
-            enabled_plugins = ins.get("plugins_enabled") or default_plugins_enabled
+            enabled_plugins = ins.get("plugins_enabled", []) + default_plugins_enabled
 
             if enabled_plugins and not isinstance(enabled_plugins, list):
                 raise ValueError(f"plugins_enabled for instance {ins_name} must be a list")

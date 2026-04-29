@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from gcd.core.models import AppContext, Index
+from gcd.core.models import AppContext, Context, Index
 from gcd.core.utils import Arrow
 
 from .context_actions import (
@@ -26,7 +26,7 @@ from .context_actions import (
     toggle_disable,
     toggle_waiting,
 )
-from .utils import Context, InputField, code_review_hint, generate_hints, instances_hint, parse_idx_notation
+from .utils import InputField, code_review_hint, generate_hints, instances_hint, parse_idx_notation
 
 PROMPT_PER_LAST_KEY = {
     "a": "Add change",
