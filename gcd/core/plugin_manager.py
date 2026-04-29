@@ -11,8 +11,8 @@ class PluginLoadError(Exception):
     pass
 
 
-def discover_plugin_classes(package_name: str) -> List[Type[BasePlugin]]:
-    classes = []
+def discover_plugin_classes(package_name: str) -> dict[str, Type[BasePlugin]]:
+    classes = {}
 
     package = importlib.import_module(package_name)
 
@@ -26,7 +26,7 @@ def discover_plugin_classes(package_name: str) -> List[Type[BasePlugin]]:
                 if not issubclass(cls, BasePlugin):
                     raise PluginLoadError(f"{cls} is not BasePlugin")
 
-                classes.append(cls)
+                classes[cls.name] = cls
 
         except Exception:
             print(f"[PLUGIN LOAD ERROR] {module_name}")
@@ -41,11 +41,21 @@ _logger = app_logger()
 class PluginManager:
     def __init__(self, ctx: AppContext):
         self.ctx = ctx
-        self.plugins: List[BasePlugin] = []
 
-        enabled_plugins = ctx.config.get_all_enabled_plugins()
+        enabled_plugins_per_instance = ctx.config.get_enabled_plugins_per_instance()
+        plugin_classes = discover_plugin_classes("gcd.plugins")
 
-        self.plugins = [plg(ctx) for plg in discover_plugin_classes("gcd.plugins") if plg.name in enabled_plugins]
+        self.plugins_per_instance: dict[str, list[BasePlugin]] = {ins.name: [] for ins in ctx.config.instances}
+
+        for instance in enabled_plugins_per_instance:
+            for plugin in enabled_plugins_per_instance[instance]:
+                if plugin not in plugin_classes:
+                    raise ValueError(f"Plugin {plugin} defined for instance {instance} doesn't exits!")
+                self.plugins_per_instance[instance].append(plugin_classes[plugin](ctx, instance))
+
+    @property
+    def plugins(self) -> list[BasePlugin]:
+        return [pl for pls in self.plugins_per_instance.values() for pl in pls]
 
     def setup(self):
         """Called on start of application"""
@@ -57,12 +67,11 @@ class PluginManager:
         for plugin in self.plugins:
             self._safe_call(plugin, "on_init")
 
-    def emit(self, event: PluginEvent, source_instance: str, args=None, kwargs=None):
+    def emit(self, event: PluginEvent, source_instance: str, *args, **kwargs):
         """Called on specific events"""
         instance = self.ctx.config.get_instance_by_name(source_instance)
-        plugins = [pl for pl in self.plugins if pl.name in instance.enabled_plugins]
 
-        for plugin in plugins:
+        for plugin in self.plugins_per_instance.get(instance.name, []):
             self._safe_call(plugin, f"on_{event}", args=args, kwargs=kwargs)
 
     def shutdown(self):
@@ -73,5 +82,6 @@ class PluginManager:
         try:
             if fn := getattr(plugin, method, None):
                 fn(*(args or []), **(kwargs or {}))
+            _logger.error(f"[PLUGIN ERROR] {plugin.name}: method {method} not found")
         except Exception:
             _logger.error(f"[PLUGIN ERROR] {plugin.name}.{method}: {traceback.format_exc()}")

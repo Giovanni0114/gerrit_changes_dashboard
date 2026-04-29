@@ -125,7 +125,7 @@ class AppConfig:
                     host=default_host,
                     port=default_port,
                     email=default_email,
-                    enabled_plugins=default_plugins_enabled,
+                    enabled_plugins=frozenset(default_plugins_enabled),
                 )
             )
 
@@ -134,14 +134,17 @@ class AppConfig:
             host = ins.get("host") or default_host
             port = ins.get("port") or default_port
             email = ins.get("email") or default_email
-            enabled_plugins = ins.get("plugins_enabled", []) + default_plugins_enabled
-
-            if enabled_plugins and not isinstance(enabled_plugins, list):
-                raise ValueError(f"plugins_enabled for instance {ins_name} must be a list")
+            enabled_plugins = ins.get("plugins_enabled", [])
 
             if host and port:
                 self._instances.append(
-                    GerritInstance(name=ins_name, host=host, port=port, email=email, enabled_plugins=enabled_plugins)
+                    GerritInstance(
+                        name=ins_name,
+                        host=host,
+                        port=port,
+                        email=email,
+                        enabled_plugins=frozenset(enabled_plugins + default_plugins_enabled),
+                    )
                 )
 
         if len(self._instances) == 0:
@@ -204,6 +207,8 @@ class AppConfig:
 
         return enabled_plugins
 
+    def get_enabled_plugins_per_instance(self) -> set[str]:
+        return {ins.name: ins.enabled_plugins for ins in self._instances}
 
 def generate_example_config(path: Path) -> None:
     if path.exists():
