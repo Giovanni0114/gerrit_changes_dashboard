@@ -92,8 +92,11 @@ class App:
             self.config.cache_path,
             len(self.config.instances),
             self.changes.count(),
-            len(self.plugin_manager.plugins),
+            len(self.plugin_manager.plugins_per_instance),
         )
+
+        self.plugin_manager.setup()
+        _log.info(f"app plugins after setup: {self.plugin_manager.plugins_per_instance}")
 
     def _sync_cache_with_changes(self) -> None:
         """Evict orphaned cache entries and hydrate tracked changes from cache."""
@@ -552,7 +555,7 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._add_comment(ch, text)
 
-            self.plugin_manager.emit("new_comment", ch.instance, [ch.id, text])
+            self.plugin_manager.emit("new_comment", ch.instance, ch.id, text)
 
     def _add_comment(self, ch: TrackedChange, text: str) -> None:
         ch.comments = [*ch.comments, text]
@@ -561,7 +564,7 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._replace_all_comments(ch, text)
 
-            self.plugin_manager.emit("new_comment", ch.instance, [ch.id, text])
+            self.plugin_manager.emit("new_comment", ch.instance, ch.id, text)
 
     def _replace_all_comments(self, ch: TrackedChange, text: str) -> None:
         ch.comments = [text]
@@ -570,7 +573,7 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._edit_last_comment(ch, text)
 
-            self.plugin_manager.emit("new_comment", ch.instance, [ch.id, text])
+            self.plugin_manager.emit("new_comment", ch.instance, ch.id, text)
 
     def _edit_last_comment(self, ch: TrackedChange, text: str) -> None:
         if ch.comments:

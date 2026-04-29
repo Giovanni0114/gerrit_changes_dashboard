@@ -26,7 +26,7 @@ class GerritInstance:
     host: str
     port: int
     email: str | None
-    enabled_plugins: list[str] = field(default_factory=list)
+    enabled_plugins: frozenset[str] = field(default_factory=frozenset)
 
 
 _TRACKED = frozenset(
@@ -159,16 +159,21 @@ class AppContext(Protocol):
 class BasePlugin(ABC):
     name: str = "base"
     version: str = "0.0.0"
+    instance: str
 
-    def __init__(self, ctx: AppContext):
+    def __init__(self, ctx: AppContext, instance: str):
         self.enabled = True
         self.ctx = ctx
-        self.log = plugin_logger(self.name)
+        self.instance = instance
+        self.log = plugin_logger(self.name, self.instance)
 
-        self.log.info(f"plugin initialized version={self.version}")
+        self.log.info(f"plugin initialized for instance={instance} version={self.version}")
 
     def metadata(self) -> dict[str, str]:
         return {"name": f"{self.name}:{self.version}"}
+
+    def __repr__(self) -> str:
+        return f"{self.name}:{self.version}"
 
     @abstractmethod
     def setup(self) -> None: ...

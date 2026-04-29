@@ -49,9 +49,9 @@ def ssh_logger() -> logging.Logger:
     return logging.getLogger(_SSH)
 
 
-def plugin_logger(plugin_name: str) -> logging.Logger:
+def plugin_logger(plugin_name: str, instance_name: str) -> logging.Logger:
     class PluginLogger(logging.LoggerAdapter):
         def process(self, msg, kwargs):
-            return f"[{plugin_name}] {msg}", kwargs
+            return f"[{plugin_name}:{instance_name}] {msg}", kwargs
 
     return PluginLogger(logging.getLogger(_PLUGIN))
