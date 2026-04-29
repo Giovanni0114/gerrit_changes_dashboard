@@ -345,14 +345,6 @@ def query_approvals(query_id: str, host: str, port: int | None = None) -> dict:
         return {"error": str(exc)}
 
 
-def is_submitted(data: dict) -> bool:
-    """Check if any patchset has a SUBM approval (change is submitted)."""
-    for ps in data.get("patchSets", []):
-        if any(appr.get("type", "?") == "SUBM" for appr in ps.get("approvals", [])):
-            return True
-    return False
-
-
 def query_open_changes(email: str, host: str, port: int | None = None) -> list[dict]:
     """Query Gerrit for all open changes owned by the given email.
 

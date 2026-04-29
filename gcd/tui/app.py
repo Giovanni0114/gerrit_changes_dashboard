@@ -17,7 +17,7 @@ from gcd.core.changes import Changes
 from gcd.core.config import (
     AppConfig,
 )
-from gcd.core.gerrit import is_submitted, query_approvals, query_open_changes
+from gcd.core.gerrit import query_approvals, query_open_changes
 from gcd.core.logs import app_logger
 from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
 from gcd.core.plugin_manager import PluginManager
@@ -58,7 +58,7 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None
         ch.waiting = False
 
     ch._snapshot = new_snapshot
-    ch.submitted = is_submitted(data)
+    ch.submitted = any(a.is_submitted() for a in ch.approvals)
 
     cache.cache(ch)
 
