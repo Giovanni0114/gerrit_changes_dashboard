@@ -3,8 +3,8 @@ import pkgutil
 import traceback
 from typing import List, Type
 
-from gcd.core.models import AppContext, BasePlugin, PluginEvent
 from gcd.core.logs import app_logger
+from gcd.core.models import AppContext, BasePlugin, PluginEvent
 
 
 class PluginLoadError(Exception):

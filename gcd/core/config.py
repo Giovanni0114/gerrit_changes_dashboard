@@ -3,8 +3,8 @@ import tomllib
 from enum import Enum
 from pathlib import Path
 
-from gcd.core.models import GerritInstance
 from gcd.core.logs import app_logger
+from gcd.core.models import GerritInstance
 
 DEFAULT_INTERVAL = 30
 DEFAULT_REFRESH_RATE = 20
@@ -134,7 +134,7 @@ class AppConfig:
             host = ins.get("host") or default_host
             port = ins.get("port") or default_port
             email = ins.get("email") or default_email
-            enabled_plugins = ins.get("plugins_enabled") or default_plugins_enabled
+            enabled_plugins = ins.get("plugins_enabled", []) + default_plugins_enabled
 
             if enabled_plugins and not isinstance(enabled_plugins, list):
                 raise ValueError(f"plugins_enabled for instance {ins_name} must be a list")

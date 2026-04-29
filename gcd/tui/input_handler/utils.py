@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
-from gcd.core.models import AppContext, Index, Context
+from gcd.core.models import AppContext, Index
 
 if TYPE_CHECKING:
     from .input_engine import LeafAction
