@@ -2,16 +2,107 @@ import json
 import subprocess
 import threading
 import time
+from dataclasses import dataclass
+from typing import Literal
 
 from gcd.core.logs import ssh_logger
+from gcd.core.models import GerritInstance
 
-_ssh_lock = threading.Lock()
-ssh_request_count: int = 0
+from .ssh import SSHCommunication
+
 _log = ssh_logger()
 
 
-def _endpoint(host: str, port: int | None) -> str:
-    return f"{host}:{port}" if port is not None else host
+def _endpoint(host: str, port: int) -> str:
+    return f"{host}:{port}"
+
+
+GerritSubcommand = Literal["review", "query"]
+GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "restore", "submit"]
+
+
+@dataclass(frozen=True)
+class GerritQueryStats:
+    row_count: int | None
+    run_time_miliseconds: int | None
+    more_chagnges: bool | None
+
+
+def make_gerrit_query_stats(data: dict) -> GerritQueryStats:
+    row_count = data.get("rowCount")
+    run_time = data.get("runtTimeMilliseconds")
+    more_changes = data.get("moreChanges")
+
+    return GerritQueryStats(row_count, run_time, more_changes)
+
+
+def _base_ssh_cmd(instance: GerritInstance, subcommand: GerritSubcommand) -> list[str]:
+    return ["ssh", "-x", "-p", str(instance.port), instance.host, "gerrit", subcommand]
+
+
+def _base_ssh_review_cmd(
+    instance: GerritInstance,
+    revision: str,
+    review_subcommand: GerritReviewSubcommand,
+) -> list[str]:
+    return [*_base_ssh_cmd(instance, "review"), revision, review_subcommand]
+
+
+class GerritCommunication:
+    ssh_communication: SSHCommunication
+
+    def query_changes(self, instance: GerritInstance, query_args: list[str]) -> list[dict]:
+        base_cmd = _base_ssh_cmd(instance, "query")
+        cmd = [*base_cmd, *query_args]
+
+        result = self.ssh_communication.execute_ssh_request(cmd)
+
+        if not result.ok() or result.data is None:
+            # TBD error log
+            return [{"error": result.msg}]
+
+        lines = result.data.splitlines()
+        changes = []
+
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if obj.get("type") == "stats":
+                # TODO think what can be done with it
+                stats = make_gerrit_query_stats(obj)
+                _log.info(f"ssh gerrit query stats: {stats}")
+            else:
+                changes.append(obj)
+
+        return changes
+
+    # TODO: create more generic "set label"
+    # But this requires creating some mechanism for defining allowed labels
+    # maybe can be done via plugin, maybe some "instance rules"???
+    def review_set_automerge(self, instance: GerritInstance, revision: str) -> str | None:
+        base_cmd = _base_ssh_review_cmd(instance, revision, "label")
+
+        cmd = [*base_cmd, "Automerge=+1"]
+
+        result = self.ssh_communication.execute_ssh_request(cmd)
+
+        if result.ok():
+            return None
+
+        if result.msg:
+            err_lines = result.msg.splitlines()
+            err_lines = [line for line in err_lines if line.startswith("error: ")]
+            for line in err_lines:
+                return line.removeprefix("error: ")
+
+
+        return "Fatal: error occured but no error message was collected"
+
 
 
 def query_set_automerge(revision: str, host: str, port: int | None = None) -> dict:
