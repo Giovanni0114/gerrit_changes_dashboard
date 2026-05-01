@@ -1,7 +1,7 @@
 import importlib
 import pkgutil
 import traceback
-from typing import List, Type
+from typing import Type
 
 from gcd.core.logs import app_logger
 from gcd.core.models import AppContext, BasePlugin, PluginEvent
@@ -82,6 +82,7 @@ class PluginManager:
         try:
             if fn := getattr(plugin, method, None):
                 fn(*(args or []), **(kwargs or {}))
-            _logger.error(f"[PLUGIN ERROR] {plugin.name}: method {method} not found")
+            else:
+                _logger.error(f"[PLUGIN ERROR] {plugin.name}: method {method} not found")
         except Exception:
             _logger.error(f"[PLUGIN ERROR] {plugin.name}.{method}: {traceback.format_exc()}")

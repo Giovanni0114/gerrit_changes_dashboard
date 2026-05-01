@@ -49,7 +49,7 @@ def _merge_identical_values(data: dict[str, list[TrackedChange]]):
     return result
 
 
-def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None:
+def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache, plugin_manager: PluginManager) -> None:
     if ch is None:
         return
 
@@ -66,19 +66,34 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None
     patch_set = data.get("currentPatchSet", {})
     ch.current_revision = patch_set.get("revision")
     ch.current_patchset_number = patch_set.get("number")
-    ch.approvals = [
+    new_approvals = [
         ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", ""))
         for a in patch_set.get("approvals", [])
     ]
 
-    new_snapshot = frozenset((a.label, a.value, a.by) for a in ch.approvals)
-    if ch.waiting and ch._snapshot and new_snapshot != ch._snapshot:
+    old_snapshot = ch._snapshot
+    new_snapshot = frozenset((a.label, a.value, a.by) for a in new_approvals)
+    ch.approvals = new_approvals
+
+    # Only emit once we have a baseline — otherwise every approval looks "new" on first hydration.
+    if old_snapshot:
+        for approval in new_approvals:
+            if (approval.label, approval.value, approval.by) not in old_snapshot:
+                plugin_manager.emit("new_approval", ch.instance, ch.id, approval)
+
+    if ch.waiting and old_snapshot and new_snapshot != old_snapshot:
         ch.waiting = False
+        plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", False))
 
     ch._snapshot = new_snapshot
+
+    was_submitted = ch.submitted
     ch.submitted = any(a.is_submitted() for a in ch.approvals)
     ch.abandoned = data.get("status") == "ABANDONED"
     ch.is_wip = bool(data.get("wip", False))
+
+    if ch.submitted != was_submitted:
+        plugin_manager.emit("status_changed", ch.instance, ch.id, ("submitted", ch.submitted))
 
     cache.cache(ch)
 
@@ -156,7 +171,7 @@ class App:
 
         with ThreadPoolExecutor(max_workers=len(changes) or 1) as pool:
             for ch, data in pool.map(self._query, changes):
-                _store_result(ch, data, self.cache)
+                _store_result(ch, data, self.cache, self.plugin_manager)
 
     def query_active_changes(self) -> None:
         self._do_query(self.changes.get_running())
@@ -489,6 +504,7 @@ class App:
 
         for ch in rows.resolve(self.changes):
             ch.waiting = not ch.waiting
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", ch.waiting))
 
     def toggle_all_waiting(self) -> None:
         if not (candidates := self.changes.get_active()):
@@ -497,7 +513,10 @@ class App:
 
         target = not all(ch.waiting for ch in candidates)
         for ch in candidates:
+            if ch.waiting == target:
+                continue
             ch.waiting = target
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", target))
 
     def toggle_deleted(self, rows: Index) -> None:
         if rows.wildcard:
@@ -505,6 +524,7 @@ class App:
 
         for ch in rows.resolve(self.changes):
             ch.deleted = not ch.deleted
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", ch.deleted))
 
     def toggle_all_deleted(self) -> None:
         if not (candidates := self.changes.get_all()):
@@ -513,7 +533,10 @@ class App:
 
         target = not all(ch.deleted for ch in candidates)
         for ch in candidates:
+            if ch.deleted == target:
+                continue
             ch.deleted = target
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", target))
 
     def toggle_disabled(self, rows: Index) -> None:
         if rows.wildcard:
@@ -521,6 +544,7 @@ class App:
 
         for ch in rows.resolve(self.changes):
             ch.disabled = not ch.disabled
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("disabled", ch.disabled))
 
     def toggle_all_disabled(self) -> None:
         candidates = self.changes.get_active()
@@ -530,7 +554,10 @@ class App:
 
         target = not all(ch.disabled for ch in candidates)
         for ch in candidates:
+            if ch.disabled == target:
+                continue
             ch.disabled = target
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("disabled", target))
 
     def refresh_all(self) -> None:
         # I know this is not a obvious place for cleaning status msg but I want to have easy way for it
@@ -555,6 +582,7 @@ class App:
             if not ch.deleted:
                 count += 1
                 ch.deleted = True
+                self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", True))
 
         if count > 0:
             self.status_msg = f"[red]{count} submitted change(s) marked for deletion[/red]"
@@ -577,6 +605,7 @@ class App:
             if ch.deleted:
                 count += 1
                 ch.deleted = False
+                self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", False))
 
         if count > 0:
             self.status_msg = f"[green]{count} change(s) restored[/green]"
@@ -603,7 +632,7 @@ class App:
                 continue
 
             ch = TrackedChange(number=number, instance=instance.name)
-            _store_result(ch, change_data, self.cache)
+            _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
             numbers_in_changes.add(number)
             added += 1
