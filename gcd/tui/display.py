@@ -132,9 +132,8 @@ def build_table(
 
         if ch.deleted:
             styles["subject"] += " strike dim"
-            styles["project"] += " dim"
+            styles["project"] += " strike dim"
             styles["row"] = " on #1c1c1c"
-            styles["comments"] += " dim strike"
 
             approvals_text = Text("deleted", style="dim red")
 
