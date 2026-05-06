@@ -95,6 +95,21 @@ also validate input, maybe more sophisticated system is needed
 
 
 
+## 023 | Gerrit Action Layer
+
+Extract the `_review_*` logic from `app.py` into a new `gcd/core/actions.py`
+module. Each action function returns a typed `ActionResult`
+(success / warning / failure). `app.py` becomes a thin TUI adapter; a future
+CLI (016) can call the same functions directly.
+
+Also fixes two latent bugs from the SSH-communication refactor:
+`query_review_restore` → `review_restore` (wrong method name) and review
+failures silently treated as success (wrong dict key check).
+
+Spec and plan in `spec/features/023-action-layer/`.
+
+---
+
 # Dev Stories
 
 ---
