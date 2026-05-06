@@ -1,5 +1,4 @@
 import json
-from dataclasses import dataclass
 from typing import Literal
 
 from gcd.core.logs import ssh_logger
@@ -11,21 +10,6 @@ _log = ssh_logger()
 
 GerritSubcommand = Literal["review", "query"]
 GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "restore", "submit"]
-
-
-@dataclass(frozen=True)
-class GerritQueryStats:
-    row_count: int | None
-    run_time_miliseconds: int | None
-    more_chagnges: bool | None
-
-
-def make_gerrit_query_stats(data: dict) -> GerritQueryStats:
-    row_count = data.get("rowCount")
-    run_time = data.get("runtTimeMilliseconds")
-    more_changes = data.get("moreChanges")
-
-    return GerritQueryStats(row_count, run_time, more_changes)
 
 
 def _base_ssh_cmd(instance: GerritInstance) -> list[str]:
@@ -45,7 +29,12 @@ def _base_ssh_query_cmd(instance: GerritInstance) -> list[str]:
 
 
 class GerritCommunication:
-    ssh_communication: SSHCommunication
+    def __init__(self) -> None:
+        self.ssh_communication = SSHCommunication()
+
+    @property
+    def ssh_request_count(self) -> int:
+        return self.ssh_communication.request_count.value()
 
     def _query(self, instance: GerritInstance, *query_args: str) -> list[dict]:
         base_cmd = _base_ssh_query_cmd(instance)
@@ -68,9 +57,7 @@ class GerritCommunication:
                 obj = {"error": str(ex)}
 
             if obj.get("type") == "stats":
-                # TODO think what can be done with it
-                stats = make_gerrit_query_stats(obj)
-                _log.info(f"ssh gerrit query stats: {stats}")
+                _log.info(f"ssh gerrit query stats: {obj}")
             else:
                 changes.append(obj)
 
@@ -93,12 +80,11 @@ class GerritCommunication:
 
         return {"failure": "Fatal: error occured but no error message was collected"}
 
-    # TODO: create more generic "set label"
-    # But this requires creating some mechanism for defining allowed labels
-    # maybe can be done via plugin, maybe some "instance rules"???
-    # maybe plugin could inject the labels?
+    def review_set_label(self, instance: GerritInstance, revision: str, label: str, value: str) -> dict:
+        return self._review(instance, "label", revision, f"{label}={value}")
+
     def review_set_automerge(self, instance: GerritInstance, revision: str) -> dict:
-        return self._review(instance, "label", revision, "Automerge=+1")
+        return self.review_set_label(instance, revision, "Automerge", "+1")
 
     def review_abandon(self, instance: GerritInstance, revision: str) -> dict:
         return self._review(instance, "abandon", revision)
@@ -120,3 +106,6 @@ class GerritCommunication:
             return {"success": next(iter(changes))}
 
         return {"error": "Change not found"}
+
+    def query_open_changes(self, instance: GerritInstance) -> dict:
+        return self._query(instance, f"owner:{instance.email}", "is:open")

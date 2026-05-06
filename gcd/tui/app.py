@@ -11,13 +11,10 @@ from typing import Literal
 from rich.console import Console, Group
 from rich.live import Live
 
-from gcd.core import gerrit
 from gcd.core.cache import SshCache
 from gcd.core.changes import Changes
-from gcd.core.config import (
-    AppConfig,
-)
-from gcd.core.gerrit import query_approvals, query_open_changes
+from gcd.core.config import AppConfig
+from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
 from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
 from gcd.core.utils import Arrow, NoEcho
@@ -68,6 +65,7 @@ class App:
         self.config = config
         self.changes = Changes(self.config.changes_path)
         self.cache = SshCache(self.config.cache_path)
+        self.gerrit_comm = GerritCommunication()
 
         self.status_msg: str = ""
         self.exit_msg: str = ""
@@ -124,7 +122,7 @@ class App:
             _log.warning("query skipped: unknown instance %r for change %s", ch.instance, ch.number)
             return None, {}
 
-        return ch, query_approvals(str(ch.number), instance.host, instance.port)
+        return ch, self.gerrit_comm.query_change(instance, str(ch.number))
 
     def _do_query(self, changes: list[TrackedChange]) -> None:
         if not changes:
@@ -167,7 +165,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change #{ch.number}[/red]"
             return
 
-        result = gerrit.query_set_automerge(ch.current_revision, instance.host, instance.port)
+        result = self.gerrit_comm.review_set_automerge(instance, ch.current_revision)
 
         if "error" in result:
             self.status_msg = f"[red]Automerge failed for change #{ch.number}: {result['error']}[/red]"
@@ -195,7 +193,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
-        result = gerrit.query_review_code_review(ch.current_revision, score, instance.host, instance.port)
+        result = self.gerrit_comm.review_code_review(instance, ch.current_revision, score)
 
         if "error" in result:
             self.status_msg = f"[red]Code-Review failed for change #{ch.number}: {result['error']}[/red]"
@@ -226,7 +224,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
-        result = gerrit.query_review_abandon(ch.current_revision, instance.host, instance.port)
+        result = self.gerrit_comm.review_abandon(instance, ch.current_revision)
 
         if "error" in result:
             self.status_msg = f"[red]Abandon failed for change {ch.number}: {result['error']}[/red]"
@@ -250,7 +248,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
-        result = gerrit.query_review_restore(ch.current_revision, instance.host, instance.port)
+        result = self.gerrit_comm.query_review_restore(instance, ch.current_revision)
 
         if "error" in result:
             self.status_msg = f"[red]Restore failed for change {ch.number}: {result['error']}[/red]"
@@ -274,7 +272,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
-        result = gerrit.query_review_submit(ch.current_revision, instance.host, instance.port)
+        result = self.gerrit_comm.review_submit(instance, ch.current_revision)
 
         if "error" in result:
             self.status_msg = f"[red]Submit failed for change {ch.number}: {result['error']}[/red]"
@@ -298,7 +296,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
-        result = gerrit.query_review_rebase(ch.current_revision, instance.host, instance.port)
+        result = self.gerrit_comm.review_rebase(instance, ch.current_revision)
 
         if "error" in result:
             self.status_msg = f"[red]Rebase failed for change {ch.number}: {result['error']}[/red]"
@@ -375,12 +373,11 @@ class App:
 
     def build(self, prompt_msg: str = "") -> Group:
         """Build the display layout (header, optional prompt, table with hints in caption)."""
-        header = build_header(ssh_requests=gerrit.ssh_request_count)
+        header = build_header(ssh_requests=self.gerrit_comm.ssh_request_count)
         table = build_table(
             self.changes,
             self.config,
             self.status_msg,
-            gerrit.ssh_request_count,
             self.input.hints(),
             self.input.selected_rows(),
         )
@@ -494,17 +491,11 @@ class App:
             self.status_msg = "[dim]Nothing to restore[/dim]"
 
     def _fetch_open_changes_from_instance(self, instance: GerritInstance) -> int:
-        host = instance.host
-        port = instance.port
-        email = self.config.resolve_email(instance)
-
-        if not email:
-            self.status_msg = (
-                f"[red]Insufficient configuration for auto-fetching: email={email} host={host} port={port}[/red]"
-            )
+        if not instance.email:
+            self.status_msg = f"[red]Insufficient configuration for auto-fetching for instance: {instance}[/red]"
             return 0
 
-        results = query_open_changes(email, host, port)
+        results = self.gerrit_comm.query_open_changes(instance)
 
         added = 0
         numbers_in_changes = {ch.number for ch in self.changes.get_all()}

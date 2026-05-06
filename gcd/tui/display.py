@@ -58,7 +58,6 @@ def build_table(
     changes: Changes,
     config: AppConfig,
     status_msg: str = "",
-    ssh_requests: int = 0,
     hints: str = "",
     selected_rows: frozenset[int] | None = None,
 ) -> Table:

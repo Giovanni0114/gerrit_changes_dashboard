@@ -4,6 +4,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from gcd.core.utils import get_email_from_git_config
+
 if TYPE_CHECKING:
     from gcd.core import changes, config
 
@@ -24,6 +26,10 @@ class GerritInstance:
     host: str
     port: int
     email: str | None
+
+    def __post_init__(self) -> None:
+        if self.email is None:
+            object.__setattr__(self, "email", get_email_from_git_config())
 
 
 _TRACKED = frozenset(
