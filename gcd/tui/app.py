@@ -40,10 +40,10 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None
     ch.subject = data.get("subject")
     ch.project = data.get("project")
     ch.url = data.get("url")
-    patch_sets = data.get("patchSets", [])
-    if patch_sets:
-        ch.current_revision = patch_sets[-1].get("revision")
-        raw = patch_sets[-1].get("approvals", [])
+    patch_set = data.get("currentPatchSet", {})
+    if patch_set:
+        ch.current_revision = patch_set.get("revision")
+        raw = patch_set.get("approvals", [])
         ch.approvals = [
             ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", "")) for a in raw
         ]

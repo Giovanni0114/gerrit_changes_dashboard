@@ -103,7 +103,7 @@ class GerritCommunication:
 
     def query_change(self, instance: GerritInstance, change_id: str) -> dict:
         if changes := self._query(instance, change_id):
-            return {"success": next(iter(changes))}
+            return next(iter(changes))
 
         return {"error": "Change not found"}
 
