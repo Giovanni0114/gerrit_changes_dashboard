@@ -1,412 +1,111 @@
 import json
-import subprocess
-import threading
-import time
+from typing import Literal
 
 from gcd.core.logs import ssh_logger
+from gcd.core.models import GerritInstance
 
-_ssh_lock = threading.Lock()
-ssh_request_count: int = 0
+from .ssh import SSHCommunication
+
 _log = ssh_logger()
 
-
-def _endpoint(host: str, port: int | None) -> str:
-    return f"{host}:{port}" if port is not None else host
-
-
-def query_set_automerge(revision: str, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "review", revision, "--label", "Automerge=+1"]
-
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=set_automerge endpoint=%s revision=%s duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint,
-                revision,
-                duration,
-                result.returncode,
-                stderr,
-            )
-            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
-            return {"error": msg}
-        _log.info(
-            "action=set_automerge endpoint=%s revision=%s duration=%.3fs status=ok",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"success": True}
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=set_automerge endpoint=%s revision=%s duration=%.3fs status=timeout",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"error": "SSH timeout"}
+GerritSubcommand = Literal["review", "query"]
+GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "submit"]
 
 
-def query_review_abandon(revision: str, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "review", revision, "--abandon"]
-
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=review_abandon endpoint=%s revision=%s duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint,
-                revision,
-                duration,
-                result.returncode,
-                stderr,
-            )
-            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
-            return {"error": msg}
-        _log.info(
-            "action=review_abandon endpoint=%s revision=%s duration=%.3fs status=ok",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"success": True}
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=review_abandon endpoint=%s revision=%s duration=%.3fs status=timeout",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"error": "SSH timeout"}
+def _base_ssh_cmd(instance: GerritInstance) -> list[str]:
+    return ["ssh", "-x", "-p", str(instance.port), instance.host, "gerrit"]
 
 
-def query_review_restore(revision: str, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "review", revision, "--restore"]
-
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=review_restore endpoint=%s revision=%s duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint,
-                revision,
-                duration,
-                result.returncode,
-                stderr,
-            )
-            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
-            return {"error": msg}
-        _log.info(
-            "action=review_restore endpoint=%s revision=%s duration=%.3fs status=ok",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"success": True}
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=review_restore endpoint=%s revision=%s duration=%.3fs status=timeout",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"error": "SSH timeout"}
+def _base_ssh_review_cmd(
+    instance: GerritInstance,
+    revision: str,
+    review_subcommand: GerritReviewSubcommand,
+) -> list[str]:
+    return [*_base_ssh_cmd(instance), "review", revision, f"--{review_subcommand}"]
 
 
-def query_review_submit(revision: str, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "review", revision, "--submit"]
-
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=review_submit endpoint=%s revision=%s duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint,
-                revision,
-                duration,
-                result.returncode,
-                stderr,
-            )
-            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
-            return {"error": msg}
-        _log.info(
-            "action=review_submit endpoint=%s revision=%s duration=%.3fs status=ok",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"success": True}
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=review_submit endpoint=%s revision=%s duration=%.3fs status=timeout",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"error": "SSH timeout"}
+def _base_ssh_query_cmd(instance: GerritInstance) -> list[str]:
+    return [*_base_ssh_cmd(instance), "query", "--format=json", "--current-patch-set"]
 
 
-def query_review_rebase(revision: str, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "review", revision, "--rebase"]
+class GerritCommunication:
+    def __init__(self) -> None:
+        self.ssh_communication = SSHCommunication()
 
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=review_rebase endpoint=%s revision=%s duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint,
-                revision,
-                duration,
-                result.returncode,
-                stderr,
-            )
-            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
-            return {"error": msg}
-        _log.info(
-            "action=review_rebase endpoint=%s revision=%s duration=%.3fs status=ok",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"success": True}
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=review_rebase endpoint=%s revision=%s duration=%.3fs status=timeout",
-            endpoint,
-            revision,
-            duration,
-        )
-        return {"error": "SSH timeout"}
+    @property
+    def ssh_request_count(self) -> int:
+        return self.ssh_communication.request_count.value()
 
+    def _query(self, instance: GerritInstance, *query_args: str) -> list[dict]:
+        base_cmd = _base_ssh_query_cmd(instance)
+        cmd = [*base_cmd, *query_args]
 
-def query_review_code_review(revision: str, score: int, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "review", revision, "--code-review", str(score)]
+        result = self.ssh_communication.execute_ssh_request(cmd)
 
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=review_code_review endpoint=%s revision=%s score=%d "
-                "duration=%.3fs status=failed rc=%d stderr=%r",
-                endpoint,
-                revision,
-                score,
-                duration,
-                result.returncode,
-                stderr,
-            )
-            msg = f"Gerrit review failed ({stderr})" if stderr else "Gerrit review failed"
-            return {"error": msg}
-        _log.info(
-            "action=review_code_review endpoint=%s revision=%s score=%d duration=%.3fs status=ok",
-            endpoint,
-            revision,
-            score,
-            duration,
-        )
-        return {"success": True}
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=review_code_review endpoint=%s revision=%s score=%d duration=%.3fs status=timeout",
-            endpoint,
-            revision,
-            score,
-            duration,
-        )
-        return {"error": "SSH timeout"}
+        if not result.ok() or result.data is None:
+            return [{"error": result.msg}]
 
+        lines = result.data.splitlines()
+        changes = []
 
-def query_approvals(query_id: str, host: str, port: int | None = None) -> dict:
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "query", "--format=json", "--all-approvals", query_id]
-
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        lines = result.stdout.strip().splitlines()
-        if not lines:
-            stderr = result.stderr.strip()
-            _log.warning(
-                "action=query_approvals endpoint=%s id=%s duration=%.3fs status=empty stderr=%r",
-                endpoint,
-                query_id,
-                duration,
-                stderr,
-            )
-            msg = f"No output from Gerrit ({stderr})" if stderr else "No output from Gerrit"
-            return {"error": msg}
-        data = json.loads(lines[0])
-        if "type" in data and data["type"] == "stats":
-            _log.info(
-                "action=query_approvals endpoint=%s id=%s duration=%.3fs status=not_found",
-                endpoint,
-                query_id,
-                duration,
-            )
-            return {"error": "Change not found"}
-        _log.info(
-            "action=query_approvals endpoint=%s id=%s duration=%.3fs status=ok",
-            endpoint,
-            query_id,
-            duration,
-        )
-        return data
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=query_approvals endpoint=%s id=%s duration=%.3fs status=timeout",
-            endpoint,
-            query_id,
-            duration,
-        )
-        return {"error": "SSH timeout"}
-    except (json.JSONDecodeError, IndexError) as exc:
-        duration = time.monotonic() - start
-        _log.error(
-            "action=query_approvals endpoint=%s id=%s duration=%.3fs status=parse_error error=%r",
-            endpoint,
-            query_id,
-            duration,
-            str(exc),
-        )
-        return {"error": str(exc)}
-
-
-def is_submitted(data: dict) -> bool:
-    """Check if any patchset has a SUBM approval (change is submitted)."""
-    for ps in data.get("patchSets", []):
-        if any(appr.get("type", "?") == "SUBM" for appr in ps.get("approvals", [])):
-            return True
-    return False
-
-
-def query_open_changes(email: str, host: str, port: int | None = None) -> list[dict]:
-    """Query Gerrit for all open changes owned by the given email.
-
-    Returns a list of change dicts. Each dict contains at least
-    ``currentPatchSet.revision`` and ``number``.  Returns an empty
-    list on SSH failure (timeout, non-zero exit).
-    """
-    global ssh_request_count
-    with _ssh_lock:
-        ssh_request_count += 1
-    cmd = ["ssh", "-x"]
-    if port is not None:
-        cmd += ["-p", str(port)]
-    cmd += [host, "gerrit", "query", "--format=json", "--current-patch-set", f"owner:{email}", "is:open"]
-
-    start = time.monotonic()
-    endpoint = _endpoint(host, port)
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        duration = time.monotonic() - start
-        if result.returncode != 0:
-            _log.warning(
-                "action=query_open_changes endpoint=%s owner=%s duration=%.3fs status=failed rc=%d",
-                endpoint,
-                email,
-                duration,
-                result.returncode,
-            )
-            return []
-        changes: list[dict] = []
-        for line in result.stdout.strip().splitlines():
+        for line in lines:
             if not line.strip():
                 continue
             try:
                 obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+            except json.JSONDecodeError as ex:
+                obj = {"error": str(ex)}
+
             if obj.get("type") == "stats":
-                continue
-            changes.append(obj)
-        _log.info(
-            "action=query_open_changes endpoint=%s owner=%s duration=%.3fs status=ok count=%d",
-            endpoint,
-            email,
-            duration,
-            len(changes),
-        )
+                _log.info(f"ssh gerrit query stats: {obj}")
+            else:
+                changes.append(obj)
+
         return changes
-    except subprocess.TimeoutExpired:
-        duration = time.monotonic() - start
-        _log.warning(
-            "action=query_open_changes endpoint=%s owner=%s duration=%.3fs status=timeout",
-            endpoint,
-            email,
-            duration,
-        )
-        return []
+
+    def _review(self, instance: GerritInstance, subcommand: GerritReviewSubcommand, revision: str, *args: str) -> dict:
+        base_cmd = _base_ssh_review_cmd(instance, revision, subcommand)
+        cmd = [*base_cmd, *args]
+
+        result = self.ssh_communication.execute_ssh_request(cmd)
+
+        if result.ok():
+            return {"success": True}
+
+        if result.msg:
+            err_lines = result.msg.splitlines()
+            err_lines = [line for line in err_lines if line.startswith("error: ")]
+            for line in err_lines:
+                return {"error": line.removeprefix("error: ")}
+
+        return {"error": "Fatal: error occurred but no error message was collected"}
+
+    def review_set_label(self, instance: GerritInstance, revision: str, label: str, value: str) -> dict:
+        return self._review(instance, "label", revision, f"{label}={value}")
+
+    def review_set_automerge(self, instance: GerritInstance, revision: str) -> dict:
+        return self.review_set_label(instance, revision, "Automerge", "+1")
+
+    def review_abandon(self, instance: GerritInstance, revision: str) -> dict:
+        return self._review(instance, "abandon", revision)
+
+    def review_restore(self, instance: GerritInstance, revision: str) -> dict:
+        return self._review(instance, "restore", revision)
+
+    def review_submit(self, instance: GerritInstance, revision: str) -> dict:
+        return self._review(instance, "submit", revision)
+
+    def review_rebase(self, instance: GerritInstance, revision: str) -> dict:
+        return self._review(instance, "rebase", revision)
+
+    def review_code_review(self, instance: GerritInstance, revision: str, score: int) -> dict:
+        return self._review(instance, "code-review", revision, str(score))
+
+    def query_change(self, instance: GerritInstance, change_id: str) -> dict:
+        if changes := self._query(instance, change_id):
+            return next(iter(changes))
+
+        return {"error": "Change not found"}
+
+    def query_open_changes(self, instance: GerritInstance) -> list[dict]:
+        return self._query(instance, f"owner:{instance.email}", "is:open")

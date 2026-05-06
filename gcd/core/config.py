@@ -1,7 +1,5 @@
 import os
-import subprocess
 import tomllib
-from functools import lru_cache
 from pathlib import Path
 
 from gcd.core.models import GerritInstance
@@ -11,23 +9,6 @@ DEFAULT_REFRESH_RATE = 20
 DEFAULT_CHANGES_FILENAME = "changes.json"
 DEFAULT_CACHE_FILENAME = "cache.json"
 DEFAULT_LOG_DIRNAME = "log"
-
-
-@lru_cache(maxsize=1)
-def _get_email_from_git_config() -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "config", "user.email"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-        email = result.stdout.strip()
-        return email
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
 
 
 class AppConfig:
@@ -166,15 +147,6 @@ class AppConfig:
     @property
     def ui_refresh_interval_sec(self) -> float:
         return 1 / self.ui_refresh_rate
-
-    def resolve_email(self, instance: GerritInstance) -> str | None:
-        if instance.email:
-            return instance.email
-
-        if self.default_instance.email:
-            return self.default_instance.email
-
-        return _get_email_from_git_config()
 
 
 def generate_example_config(path: Path) -> None:

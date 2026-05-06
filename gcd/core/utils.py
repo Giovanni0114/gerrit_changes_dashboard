@@ -1,9 +1,11 @@
 import os
 import select
+import subprocess
 import sys
 import termios
 import tty
 from enum import Enum
+from functools import lru_cache
 from threading import Lock
 from typing import Self
 
@@ -91,3 +93,19 @@ class NoEcho:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.disable()
+
+@lru_cache(maxsize=1)
+def get_email_from_git_config() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return None
+        email = result.stdout.strip()
+        return email
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
