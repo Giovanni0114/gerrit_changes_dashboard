@@ -248,7 +248,7 @@ class App:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
             return
 
-        result = self.gerrit_comm.query_review_restore(instance, ch.current_revision)
+        result = self.gerrit_comm.review_restore(instance, ch.current_revision)
 
         if "error" in result:
             self.status_msg = f"[red]Restore failed for change {ch.number}: {result['error']}[/red]"

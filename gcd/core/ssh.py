@@ -1,12 +1,9 @@
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Literal
 
 from gcd.core.logs import ssh_logger
 from gcd.core.utils import AtomicCounter
-
-Result = Literal["success", "failure"]
 
 _log = ssh_logger()
 

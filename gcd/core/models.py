@@ -17,7 +17,7 @@ class ApprovalEntry:
     by: str
 
     def is_submitted(self) -> bool:
-        return self.label.lower() == "SUBM"
+        return self.label.upper() == "SUBM"
 
 
 @dataclass(frozen=True)

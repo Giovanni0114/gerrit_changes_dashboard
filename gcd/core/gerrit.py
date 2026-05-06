@@ -9,7 +9,7 @@ from .ssh import SSHCommunication
 _log = ssh_logger()
 
 GerritSubcommand = Literal["review", "query"]
-GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "restore", "submit"]
+GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "submit"]
 
 
 def _base_ssh_cmd(instance: GerritInstance) -> list[str]:
@@ -21,7 +21,7 @@ def _base_ssh_review_cmd(
     revision: str,
     review_subcommand: GerritReviewSubcommand,
 ) -> list[str]:
-    return [*_base_ssh_cmd(instance), "review", revision, review_subcommand]
+    return [*_base_ssh_cmd(instance), "review", revision, f"--{review_subcommand}"]
 
 
 def _base_ssh_query_cmd(instance: GerritInstance) -> list[str]:
@@ -76,9 +76,9 @@ class GerritCommunication:
             err_lines = result.msg.splitlines()
             err_lines = [line for line in err_lines if line.startswith("error: ")]
             for line in err_lines:
-                return {"failure": line.removeprefix("error: ")}
+                return {"error": line.removeprefix("error: ")}
 
-        return {"failure": "Fatal: error occured but no error message was collected"}
+        return {"error": "Fatal: error occurred but no error message was collected"}
 
     def review_set_label(self, instance: GerritInstance, revision: str, label: str, value: str) -> dict:
         return self._review(instance, "label", revision, f"{label}={value}")
@@ -107,5 +107,5 @@ class GerritCommunication:
 
         return {"error": "Change not found"}
 
-    def query_open_changes(self, instance: GerritInstance) -> dict:
+    def query_open_changes(self, instance: GerritInstance) -> list[dict]:
         return self._query(instance, f"owner:{instance.email}", "is:open")
