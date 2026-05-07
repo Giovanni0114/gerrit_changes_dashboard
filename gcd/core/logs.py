@@ -33,12 +33,11 @@ def _build(name: str, log_dir: Path, filename: str) -> logging.Logger:
     return logger
 
 
-def setup_logging(log_dir: Path) -> Path:
+def setup_logging(log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     _build(_APP, log_dir, "app.log")
     _build(_SSH, log_dir, "ssh.log")
     _build(_PLUGIN, log_dir, "plugin.log")
-    return log_dir
 
 
 def app_logger() -> logging.Logger:

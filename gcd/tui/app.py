@@ -573,6 +573,7 @@ class App:
     def add_change(self, number: int, instance: str) -> None:
         new_change = TrackedChange(number=number, instance=instance)
         self.changes.append(new_change)
+        self.plugin_manager.emit("new_change", new_change.instance, new_change.id, new_change)
         self.status_msg = f"[green]Added {number} @ {instance}[/green]"
         _log.info("change added number=%d instance=%s", number, instance)
 
@@ -634,6 +635,7 @@ class App:
             ch = TrackedChange(number=number, instance=instance.name)
             _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
+            self.plugin_manager.emit("new_change", ch.instance, ch.id, ch)
             numbers_in_changes.add(number)
             added += 1
 
@@ -878,13 +880,12 @@ def main() -> None:
         sys.exit(1)
 
     config = AppConfig(config_path)
+    setup_logging(config.log_path)
+    _log.info("startup config=%s logs=%s", config_path, config.log_path)
 
     if args.clear_cache:
         config.cache_path.unlink(missing_ok=True)
-        print(f"Cleared cache: {config.cache_path}")
-
-    log_path = setup_logging(config.log_path)
-    app_logger().info("startup config=%s logs=%s", config_path, log_path)
+        _log.info("cleared cache=%s", config.cache_path)
 
     with NoEcho():
         app = App(config)

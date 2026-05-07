@@ -11,6 +11,9 @@ class PluginLoadError(Exception):
     pass
 
 
+_logger = app_logger()
+
+
 def discover_plugin_classes(package_name: str) -> dict[str, Type[BasePlugin]]:
     classes = {}
 
@@ -29,17 +32,14 @@ def discover_plugin_classes(package_name: str) -> dict[str, Type[BasePlugin]]:
                 classes[cls.name] = cls
 
         except Exception:
-            print(f"[PLUGIN LOAD ERROR] {module_name}")
+            _logger.error(f"[PLUGIN LOAD ERROR] {module_name}")
             traceback.print_exc()
 
     return classes
 
 
-_logger = app_logger()
-
-
 class PluginManager:
-    def __init__(self, ctx: AppContext):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
 
         enabled_plugins_per_instance = ctx.config.get_enabled_plugins_per_instance()
@@ -57,28 +57,32 @@ class PluginManager:
     def plugins(self) -> list[BasePlugin]:
         return [pl for pls in self.plugins_per_instance.values() for pl in pls]
 
-    def setup(self):
+    def setup(self) -> None:
         """Called on start of application"""
         for plugin in self.plugins:
             self._safe_call(plugin, "setup")
 
-    def init(self):
+    def init(self) -> None:
         """Called when app is ready and changes are loaded"""
         for plugin in self.plugins:
             self._safe_call(plugin, "on_init")
 
-    def emit(self, event: PluginEvent, source_instance: str, *args, **kwargs):
+    def emit(self, event: PluginEvent, source_instance: str, *args, **kwargs) -> None:
         """Called on specific events"""
         instance = self.ctx.config.get_instance_by_name(source_instance)
+
+        if not instance:
+            _logger.error(f"Error during emitting event {event} Unknown instance: {source_instance}")
+            return
 
         for plugin in self.plugins_per_instance.get(instance.name, []):
             self._safe_call(plugin, f"on_{event}", args=args, kwargs=kwargs)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         for plugin in self.plugins:
             self._safe_call(plugin, "on_exit")
 
-    def _safe_call(self, plugin: BasePlugin, method: str, args=None, kwargs=None):
+    def _safe_call(self, plugin: BasePlugin, method: str, args=None, kwargs=None) -> None:
         try:
             if fn := getattr(plugin, method, None):
                 fn(*(args or []), **(kwargs or {}))

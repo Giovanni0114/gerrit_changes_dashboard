@@ -222,7 +222,10 @@ class BasePlugin(ABC):
         self.log.info("new_approval event handler not implemented")
 
     def on_status_changed(self, change_id: ChangeIdentifier, new_status: tuple[str, bool]) -> None:
-        self.log.info("new_approval event handler not implemented")
+        self.log.info("status_changed event handler not implemented")
+
+    def on_new_change(self, new_change: TrackedChange) -> None:
+        self.log.info("new_change event handler not implemented")
 
 
-PluginEvent = Literal["new_comment", "new_approval", "status_changed"]
+PluginEvent = Literal["new_comment", "new_approval", "status_changed", "new_change"]
