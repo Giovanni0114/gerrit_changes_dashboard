@@ -141,6 +141,13 @@ def build_table(
 
             approvals_text = Text("disabled", style="dim yellow")
 
+        elif ch.abandoned:
+            styles["subject"] += " strike dim"
+            styles["project"] += " strike dim"
+            styles["row"] = "on #1c1c1c"
+
+            approvals_text = Text("ABANDONED", style="red dim")
+
         elif ch.waiting:
             styles["row"] = "on #2a2a2a"
 

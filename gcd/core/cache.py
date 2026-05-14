@@ -15,6 +15,7 @@ class CacheEntry:
     url: str | None = None
     current_revision: str | None = None
     submitted: bool = False
+    abandoned: bool = False
     approvals: list[ApprovalEntry] = field(default_factory=list)
 
     @classmethod
@@ -25,6 +26,7 @@ class CacheEntry:
             url=ch.url,
             current_revision=ch.current_revision,
             submitted=ch.submitted,
+            abandoned=ch.abandoned,
             approvals=list(ch.approvals),
         )
 
@@ -35,6 +37,7 @@ class CacheEntry:
             "url": self.url,
             "current_revision": self.current_revision,
             "submitted": self.submitted,
+            "abandoned": self.abandoned,
             "approvals": [{"label": a.label, "value": a.value, "by": a.by} for a in self.approvals],
         }
 
@@ -51,6 +54,7 @@ class CacheEntry:
             url=data.get("url"),
             current_revision=data.get("current_revision"),
             submitted=bool(data.get("submitted", False)),
+            abandoned=bool(data.get("abandoned", False)),
             approvals=approvals,
         )
 
@@ -127,5 +131,6 @@ class SshCache:
         ch.url = entry.url
         ch.current_revision = entry.current_revision
         ch.submitted = entry.submitted
+        ch.abandoned = entry.abandoned
         ch.approvals = list(entry.approvals)
         ch._snapshot = frozenset((a.label, a.value, a.by) for a in entry.approvals)

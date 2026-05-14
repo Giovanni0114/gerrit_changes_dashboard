@@ -94,6 +94,7 @@ class NoEcho:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.disable()
 
+
 @lru_cache(maxsize=1)
 def get_email_from_git_config() -> str | None:
     try:
