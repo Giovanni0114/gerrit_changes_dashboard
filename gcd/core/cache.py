@@ -16,6 +16,7 @@ class CacheEntry:
     current_revision: str | None = None
     submitted: bool = False
     abandoned: bool = False
+    is_wip: bool = False
     approvals: list[ApprovalEntry] = field(default_factory=list)
 
     @classmethod
@@ -27,6 +28,7 @@ class CacheEntry:
             current_revision=ch.current_revision,
             submitted=ch.submitted,
             abandoned=ch.abandoned,
+            is_wip=ch.is_wip,
             approvals=list(ch.approvals),
         )
 
@@ -38,6 +40,7 @@ class CacheEntry:
             "current_revision": self.current_revision,
             "submitted": self.submitted,
             "abandoned": self.abandoned,
+            "is_wip": self.is_wip,
             "approvals": [{"label": a.label, "value": a.value, "by": a.by} for a in self.approvals],
         }
 
@@ -55,6 +58,7 @@ class CacheEntry:
             current_revision=data.get("current_revision"),
             submitted=bool(data.get("submitted", False)),
             abandoned=bool(data.get("abandoned", False)),
+            is_wip=bool(data.get("is_wip", False)),
             approvals=approvals,
         )
 
@@ -132,5 +136,6 @@ class SshCache:
         ch.current_revision = entry.current_revision
         ch.submitted = entry.submitted
         ch.abandoned = entry.abandoned
+        ch.is_wip = entry.is_wip
         ch.approvals = list(entry.approvals)
         ch._snapshot = frozenset((a.label, a.value, a.by) for a in entry.approvals)

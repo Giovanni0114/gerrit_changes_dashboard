@@ -148,6 +148,9 @@ def build_table(
 
             approvals_text = Text("ABANDONED", style="red dim")
 
+        elif ch.is_wip:
+            approvals_text = Text("WIP", style="bright_black")
+
         elif ch.waiting:
             styles["row"] = "on #2a2a2a"
 

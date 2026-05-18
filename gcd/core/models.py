@@ -54,6 +54,7 @@ class TrackedChange:
     deleted: bool = False
     submitted: bool = False
     abandoned: bool = False
+    is_wip: bool = False
     disabled: bool = False
     waiting: bool = False
 
@@ -76,12 +77,12 @@ class TrackedChange:
         super().__setattr__(name, value)
 
     def is_running(self) -> bool:
-        """non-submitted && non-deleted && non-disabled"""
-        return not self.submitted and not self.abandoned and not self.deleted and not self.disabled
+        """non-submitted && non-abandoned && non-wip && non-deleted && non-disabled"""
+        return not self.submitted and not self.abandoned and not self.is_wip and not self.deleted and not self.disabled
 
     def is_active(self) -> bool:
-        """non-submitted && non-abandoned && non-deleted"""
-        return not self.submitted and not self.abandoned and not self.deleted
+        """non-submitted && non-abandoned && non-wip && non-deleted"""
+        return not self.submitted and not self.abandoned and not self.is_wip and not self.deleted
 
 
 @dataclass(frozen=True)

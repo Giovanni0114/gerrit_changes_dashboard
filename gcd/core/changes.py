@@ -74,11 +74,11 @@ class Changes:
         return self._changes
 
     def get_running(self):
-        """non-submitted && non-deleted && non-disabled"""
+        """non-submitted && non-abandoned && non-wip && non-deleted && non-disabled"""
         return [ch for ch in self._changes if ch.is_running()]
 
     def get_active(self):
-        """non-submitted && non-deleted"""
+        """non-submitted && non-abandoned && non-wip && non-deleted"""
         return [ch for ch in self._changes if ch.is_active()]
 
     def get_disabled(self):

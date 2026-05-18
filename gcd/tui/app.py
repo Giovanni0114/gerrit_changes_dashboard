@@ -57,6 +57,7 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None
     ch._snapshot = new_snapshot
     ch.submitted = any(a.is_submitted() for a in ch.approvals)
     ch.abandoned = data.get("status") == "ABANDONED"
+    ch.is_wip = bool(data.get("wip", False))
 
     cache.cache(ch)
 
