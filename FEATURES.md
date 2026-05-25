@@ -86,15 +86,6 @@ After idx was specified by user, one or more rows that was selected should highl
 
 ---
 
-## 022 | rich index notation for comments
-
-user should be able to specify multiple comments to delete
-editing ofc still should be limited to only one target
-
-also validate input, maybe more sophisticated system is needed
-
-
-
 ## 023 | Gerrit Action Layer
 
 Extract the `_review_*` logic from `app.py` into a new `gcd/core/actions.py`
@@ -144,24 +135,4 @@ This SPIKE supersedes EPIC002 — if CLI is built, EPIC002 becomes unnecessary.
 
 ---
 
-## 018 | Changes auto-save and internal mtime tracking
-
-`Changes` should own its own persistence. Today `app.py` calls `save_changes()`
-in 14 places and tracks `changes_mtime` externally. This feature adds:
-
-- Internal `_mtime` tracking (remove `self.changes_mtime` from `App`)
-- Dirty flag (`_dirty`) — skip writes when nothing changed
-- `flush()` — replaces `save_changes()`, no-op when clean
-- `has_external_changes()` — replaces mtime comparison in `reload_config()`
-- `mark_dirty()` — for mutations outside context managers
-
-Depends on 017 (cache). Full spec in `spec/features/018-changes-auto-save/spec.md`.
-
----
-
-## 019 | Add saving patchset number to the cache
-
-Will be useful for the future
-
----
 
