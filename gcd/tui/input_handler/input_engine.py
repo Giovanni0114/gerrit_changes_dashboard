@@ -1,3 +1,4 @@
+from gcd.core.config import Layout
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
@@ -24,6 +25,7 @@ from .context_actions import (
     review_submit_action,
     set_automerge,
     toggle_disable,
+    toggle_layout,
     toggle_waiting,
 )
 from .utils import Context, InputField, code_review_hint, generate_hints, instances_hint, parse_idx_notation
@@ -76,7 +78,16 @@ TOP_LEVEL_ACTIONS = {
     "f": LeafAction(fetch_my_changes, [], "Fetch"),
     "a": LeafAction(add_change, [NUMBER_FIELD, INSTANCE_FIELD], "Add change"),
     "e": LeafAction(None, [], "Editor"),
+    "<tab>": LeafAction(toggle_layout, [], "Toggle layout"),
 }
+
+ALLOWED_IN_NON_DEFAULT_LAYER = [
+    "r",
+    "q",
+    "f",
+    "e",
+    "<tab>",
+]
 
 # --- Comment sub-actions ---
 COMMENT_ACTIONS: dict[str, LeafAction] = {
@@ -127,6 +138,19 @@ def key_allowed_in_sequence(key: str, sequence: Iterable[str]) -> bool:
             return key in REVIEW_ACTIONS
         case [" ", "c"]:
             return key in COMMENT_ACTIONS
+
+    return False
+
+
+def key_allowed_in_layout(key: str, layout: Layout) -> bool:
+    if key == "<enter>":
+        return True
+
+    match layout:
+        case Layout.DEFAULT:
+            return True
+        case Layout.INSTANCES:
+            return key in ALLOWED_IN_NON_DEFAULT_LAYER
 
     return False
 
@@ -216,6 +240,10 @@ class InputHandler:
 
         if not key_allowed_in_sequence(key, self.sequence):
             self.app_context.status_msg = f"key not allowed in sequence : {key} {self.sequence}"
+            return
+
+        if not key_allowed_in_layout(key, self.app_context.config.layout):
+            self.app_context.status_msg = f"key '{key}' not allowed in layout '{self.app_context.config.layout.name}'"
             return
 
         if key == "<enter>":

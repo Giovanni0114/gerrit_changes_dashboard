@@ -11,6 +11,10 @@ def quit_app(app_ctx: AppContext, ctx: Context) -> None:
     app_ctx.quit()
 
 
+def toggle_layout(app_ctx: AppContext, ctx: Context) -> None:
+    app_ctx.config.next_layout()
+
+
 def add_change(app_ctx: AppContext, ctx: Context) -> None:
     raw_number = ctx["number"]
     raw_instance = ctx["instance"]

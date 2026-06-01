@@ -10,15 +10,16 @@ from typing import Literal
 
 from rich.console import Console, Group
 from rich.live import Live
+from rich.table import Table
 
 from gcd.core.cache import SshCache
 from gcd.core.changes import Changes
-from gcd.core.config import AppConfig
+from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
 from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
 from gcd.core.utils import Arrow, NoEcho
-from gcd.tui.display import build_header, build_layout, build_table
+from gcd.tui.display import build_footer, build_header, build_layout, build_table
 from gcd.tui.input_handler import InputHandler
 
 _console = Console()
@@ -373,17 +374,34 @@ class App:
 
     # --- Display methods ---
 
+    def make_tables(self) -> list[Table]:
+        tables = []
+
+        match self.config.layout:
+            case Layout.DEFAULT:
+                tables.append(build_table(self.changes.get_all(), self.input.selected_rows()))
+            case Layout.INSTANCES:
+                for instance in self.config.instances:
+                    changes = [ch for ch in self.changes.get_all() if ch.instance == instance.name]
+
+                    if changes:
+                        tables.append(build_table(changes, self.input.selected_rows(), header_text=instance.name))
+
+        return tables
+
     def build(self, prompt_msg: str = "") -> Group:
         """Build the display layout (header, optional prompt, table with hints in caption)."""
         header = build_header(ssh_requests=self.gerrit_comm.ssh_request_count)
-        table = build_table(
-            self.changes,
+
+        tables = self.make_tables()
+
+        footer = build_footer(
             self.config,
             self.status_msg,
             self.input.hints(),
-            self.input.selected_rows(),
         )
-        return build_layout(header, table, prompt=prompt_msg)
+
+        return build_layout(header, tables, footer, prompt=prompt_msg, show_header=self.config.show_header)
 
     def visual_update_if_needed(self, live: Live, force: bool = False) -> None:
         if self.needs_visual_update:

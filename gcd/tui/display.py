@@ -1,12 +1,11 @@
 from datetime import datetime
 from typing import Iterable, List
 
-from rich.console import Group
+from rich.console import Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from gcd.core.changes import Changes
 from gcd.core.config import AppConfig
 from gcd.core.models import ApprovalEntry, TrackedChange
 
@@ -54,39 +53,45 @@ def enumerate_comments(comments: List[str]) -> str:
     return "\n".join(f"{idx}. {comment}" for idx, comment in enumerate(comments, 1))
 
 
-def build_table(
-    changes: Changes,
+def build_footer(
     config: AppConfig,
     status_msg: str = "",
     hints: str = "",
-    selected_rows: frozenset[int] | None = None,
-) -> Table:
-    # TODO config.py should produce message with config summary
-    caption = f"[dim]config:[/dim] {config.path} | [dim]interval:[/dim] {config.interval}s"
+) -> Text:
+    caption = f"[dim]config:[/dim] {config.path} | {config.generate_rich_footnote()}"
 
     if hints:
-        caption = f"{caption}\n{hints}"
+        caption += f"\n[dim]{hints}[/dim]"
 
     if status_msg:
         caption = f"{status_msg}\n{caption}"
 
+    return Text.from_markup(caption, justify="center")
+
+
+def build_table(
+    changes: list[TrackedChange],
+    selected_rows: frozenset[int] | None = None,
+    header_text: str | None = None,
+) -> Table:
     table = Table(
-        caption=caption,
         expand=True,
         box=None,
         show_edge=False,
         row_styles=["", "on #1a1a2e"],
         pad_edge=False,
+        title=header_text,
+        title_style="bold white reverse",
     )
     table.add_column("idx", style="dim", no_wrap=True, width=2)
     table.add_column("Number", style="magenta", no_wrap=True, width=6)
-    table.add_column("Project", no_wrap=True)
-    table.add_column("Subject", max_width=50, no_wrap=True)
+    table.add_column("Project", no_wrap=True, width=20)
+    table.add_column("Subject", max_width=50, no_wrap=True, width=50)
     table.add_column("Comments", no_wrap=False, ratio=40)
     table.add_column("Approvals", no_wrap=False, ratio=35)
 
     selected = selected_rows or frozenset()
-    for idx, ch in enumerate(changes.get_all(), 1):
+    for idx, ch in enumerate(changes, 1):
         styles = {
             "idx": "dim",
             "number": "magenta",
@@ -179,12 +184,19 @@ def build_header(ssh_requests: int = 0) -> Panel:
     return Panel(centered_text, expand=True, style="")
 
 
-def build_layout(header: Panel, table: Table, prompt: str | None) -> Group:
-    renderables: list = [header]
+def build_layout(
+    header: RenderableType, tables: list[Table], footer: RenderableType, prompt: str | None, show_header: bool = False
+) -> Group:
+    renderables: list = []
+
+    if show_header:
+        renderables.append(header)
 
     if prompt:
         renderables.append(Text.from_markup(prompt, style="bold yellow"))
 
-    renderables.append(table)
+    for table in tables:
+        renderables.append(table)
 
+    renderables.append(footer)
     return Group(*renderables)

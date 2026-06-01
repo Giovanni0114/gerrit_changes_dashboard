@@ -1,5 +1,6 @@
 import os
 import tomllib
+from enum import Enum
 from pathlib import Path
 
 from gcd.core.models import GerritInstance
@@ -11,6 +12,11 @@ DEFAULT_CACHE_FILENAME = "cache.json"
 DEFAULT_LOG_DIRNAME = "log"
 
 
+class Layout(Enum):
+    DEFAULT = "default"
+    INSTANCES = "per_instance"
+
+
 class AppConfig:
     path: Path
 
@@ -19,6 +25,8 @@ class AppConfig:
     changes_path: Path
     cache_path: Path
     log_path: Path
+    show_header: bool | None
+    layout: Layout = Layout.DEFAULT
 
     _instances: list[GerritInstance]
     _editor: str | None = None
@@ -84,6 +92,7 @@ class AppConfig:
         if self.log_path.exists() and not self.log_path.is_dir():
             raise ValueError(f"log_dir exists but is not a directory: {self.log_path}")
 
+        self.show_header = config_data.get("show_header", "no").lower() in ["y", "yes", "1", "true"]
         self._editor = config_data.get("editor")
 
         self._instances = []
@@ -147,6 +156,19 @@ class AppConfig:
     @property
     def ui_refresh_interval_sec(self) -> float:
         return 1 / self.ui_refresh_rate
+
+    def next_layout(self) -> Layout:
+        if self.layout == Layout.DEFAULT:
+            self.layout = Layout.INSTANCES
+        else:
+            self.layout = Layout.DEFAULT
+
+        return self.layout
+
+    def generate_rich_footnote(self) -> str:
+        footnote = f"[dim]interval[/dim]: {self.interval}s"
+        footnote += f" | [dim]layout[/dim]: {self.layout.name}" # TODO: REMOVE before commit
+        return footnote
 
 
 def generate_example_config(path: Path) -> None:
