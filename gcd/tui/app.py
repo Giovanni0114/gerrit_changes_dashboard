@@ -387,6 +387,15 @@ class App:
                     if changes:
                         tables.append(build_table(changes, self.input.selected_rows(), header_text=instance.name))
 
+            case Layout.TAGS:
+                tags = self.changes.get_all_tags()
+
+                for tag in tags:
+                    changes = [ch for ch in self.changes.get_all() if tag in ch.comments]
+
+                    if changes:
+                        tables.append(build_table(changes, self.input.selected_rows(), header_text=tag))
+
         return tables
 
     def build(self, prompt_msg: str = "") -> Group:

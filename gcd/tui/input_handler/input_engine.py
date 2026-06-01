@@ -1,7 +1,7 @@
-from gcd.core.config import Layout
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
+from gcd.core.config import Layout
 from gcd.core.models import AppContext, Index
 from gcd.core.utils import Arrow
 
@@ -82,6 +82,7 @@ TOP_LEVEL_ACTIONS = {
 }
 
 ALLOWED_IN_NON_DEFAULT_LAYER = [
+    "<enter>",
     "r",
     "q",
     "f",
@@ -143,16 +144,10 @@ def key_allowed_in_sequence(key: str, sequence: Iterable[str]) -> bool:
 
 
 def key_allowed_in_layout(key: str, layout: Layout) -> bool:
-    if key == "<enter>":
+    if layout == Layout.DEFAULT:
         return True
-
-    match layout:
-        case Layout.DEFAULT:
-            return True
-        case Layout.INSTANCES:
-            return key in ALLOWED_IN_NON_DEFAULT_LAYER
-
-    return False
+    else:
+        return key in ALLOWED_IN_NON_DEFAULT_LAYER
 
 
 def match_action(sequence: list[str]) -> LeafAction | None:

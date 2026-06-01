@@ -15,6 +15,7 @@ DEFAULT_LOG_DIRNAME = "log"
 class Layout(Enum):
     DEFAULT = "default"
     INSTANCES = "per_instance"
+    TAGS = "per_tags"
 
 
 class AppConfig:
@@ -160,6 +161,8 @@ class AppConfig:
     def next_layout(self) -> Layout:
         if self.layout == Layout.DEFAULT:
             self.layout = Layout.INSTANCES
+        elif self.layout == Layout.INSTANCES:
+            self.layout = Layout.TAGS
         else:
             self.layout = Layout.DEFAULT
 
@@ -167,7 +170,7 @@ class AppConfig:
 
     def generate_rich_footnote(self) -> str:
         footnote = f"[dim]interval[/dim]: {self.interval}s"
-        footnote += f" | [dim]layout[/dim]: {self.layout.name}" # TODO: REMOVE before commit
+        # footnote += f" | [dim]layout[/dim]: {self.layout.name}"
         return footnote
 
 

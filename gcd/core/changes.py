@@ -90,6 +90,16 @@ class Changes:
     def get_deleted(self):
         return [ch for ch in self._changes if ch.deleted]
 
+    def get_all_tags(self) -> set[str]:
+        def _is_tag(comment: str) -> bool:
+            return comment.startswith("#") and " " not in comment
+
+        tags = set()
+        for ch in self._changes:
+            tags.update(set([comment for comment in ch.comments if _is_tag(comment)]))
+
+        return tags
+
     # --- operations ---
 
     def remove_all_deleted(self):

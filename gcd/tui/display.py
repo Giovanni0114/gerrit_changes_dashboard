@@ -83,7 +83,10 @@ def build_table(
         title=header_text,
         title_style="bold white reverse",
     )
-    table.add_column("idx", style="dim", no_wrap=True, width=2)
+
+    if header_text is None:
+        table.add_column("idx", style="dim", no_wrap=True, width=2)
+
     table.add_column("Number", style="magenta", no_wrap=True, width=6)
     table.add_column("Project", no_wrap=True, width=20)
     table.add_column("Subject", max_width=50, no_wrap=True, width=50)
@@ -165,12 +168,19 @@ def build_table(
 
         comments_text = comments_text or enumerate_comments(ch.comments)
 
+        elements = [] if header_text else [Text(str(idx), style=styles["idx"])]
+
+        elements.extend(
+            [
+                Text(number_text, style=styles["number"]),
+                Text(project_text, style=styles["project"]),
+                Text(subject_text, style=styles["subject"]),
+                Text(comments_text, style=styles["comments"]),
+            ]
+        )
+
         table.add_row(
-            Text(str(idx), style=styles["idx"]),
-            Text(number_text, style=styles["number"]),
-            Text(project_text, style=styles["project"]),
-            Text(subject_text, style=styles["subject"]),
-            Text(comments_text, style=styles["comments"]),
+            *elements,
             approvals_text,
             style=styles["row"],
         )
