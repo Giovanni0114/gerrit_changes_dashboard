@@ -50,7 +50,21 @@ def enumerate_comments(comments: List[str]) -> str:
     if len(comments) == 1:
         return comments[0]
 
-    return "\n".join(f"{idx}. {comment}" for idx, comment in enumerate(comments, 1))
+    tags = [s for s in comments if s.startswith("#")]
+    rest = [s for s in comments if not s.startswith("#")]
+
+    result = ""
+
+    if tags:
+        result += " ".join(tags)
+
+    if tags and rest:
+        result += "\n"
+
+    if rest:
+        result += "\n".join(f"{idx}. {comment}" for idx, comment in enumerate(rest, 1))
+
+    return result
 
 
 def build_footer(
