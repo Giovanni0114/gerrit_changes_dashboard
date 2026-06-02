@@ -76,6 +76,13 @@ class TrackedChange:
             super().__setattr__("modified", True)
         super().__setattr__(name, value)
 
+    @property
+    def id(self) -> str:
+        return f"{self.number}:{self.instance}"
+
+    def __hash__(self) -> int:
+        return hash(self.id)
+
     def is_running(self) -> bool:
         """non-submitted && non-abandoned && non-wip && non-deleted && non-disabled"""
         return not self.submitted and not self.abandoned and not self.is_wip and not self.deleted and not self.disabled

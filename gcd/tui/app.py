@@ -28,6 +28,26 @@ _log = app_logger()
 EditorTarget = Literal["changes", "config"]
 
 
+def _merge_identical_values(data: dict[str, list[TrackedChange]]):
+    groups = {}
+
+    for key, value in data.items():
+        value_key = tuple(value)
+
+        if value_key not in groups:
+            groups[value_key] = []
+
+        groups[value_key].append(key)
+
+    result = {}
+
+    for value_key, keys in groups.items():
+        merged_key = " ".join(sorted(keys))
+        result[merged_key] = list(value_key)
+
+    return result
+
+
 def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None:
     if ch is None:
         return
@@ -391,11 +411,16 @@ class App:
             case Layout.TAGS:
                 tags = sorted(self.changes.get_all_tags())
 
+                data = {}
                 for tag in tags:
                     changes = [ch for ch in self.changes.get_all() if tag in ch.comments]
 
                     if changes:
-                        tables.append(build_table(changes, self.input.selected_rows(), header_text=tag))
+                        data[tag] = changes
+
+                data = _merge_identical_values(data)
+                for tag, changes in data.items():
+                    tables.append(build_table(changes, self.input.selected_rows(), header_text=tag))
 
                 no_tags = [ch for ch in self.changes.get_all() if all(not com.startswith("#") for com in ch.comments)]
 
