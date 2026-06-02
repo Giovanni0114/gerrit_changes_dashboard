@@ -380,6 +380,7 @@ class App:
         match self.config.layout:
             case Layout.DEFAULT:
                 tables.append(build_table(self.changes.get_all(), self.input.selected_rows()))
+
             case Layout.INSTANCES:
                 for instance in self.config.instances:
                     changes = [ch for ch in self.changes.get_all() if ch.instance == instance.name]
@@ -388,13 +389,18 @@ class App:
                         tables.append(build_table(changes, self.input.selected_rows(), header_text=instance.name))
 
             case Layout.TAGS:
-                tags = self.changes.get_all_tags()
+                tags = sorted(self.changes.get_all_tags())
 
                 for tag in tags:
                     changes = [ch for ch in self.changes.get_all() if tag in ch.comments]
 
                     if changes:
                         tables.append(build_table(changes, self.input.selected_rows(), header_text=tag))
+
+                no_tags = [ch for ch in self.changes.get_all() if all(not com.startswith("#") for com in ch.comments)]
+
+                if no_tags:
+                    tables.append(build_table(no_tags, self.input.selected_rows(), header_text="no tags"))
 
         return tables
 
