@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
+from sys import path_importer_cache
 
 from gcd.core.models import TrackedChange
+from gcd.core.logs import app_logger
+
+_logger = app_logger()
 
 
 class Changes:
@@ -82,14 +86,19 @@ class Changes:
         return [ch for ch in self._changes if ch.deleted]
 
     def get_all_tags(self) -> set[str]:
-        def _is_tag(comment: str) -> bool:
-            return comment.startswith("#") and " " not in comment
+        return set(ch.tags for ch in self._changes)
 
-        tags = set()
+    def get_all_per_tag(self) -> dict[str, list[TrackedChange]]:
+        per_tag = {"no tags": []}
         for ch in self._changes:
-            tags.update(set([comment for comment in ch.comments if _is_tag(comment)]))
+            if ch.tags is None:
+                per_tag["no tags"].append(ch)
+            elif ch.tags in per_tag:
+                per_tag[ch.tags].append(ch)
+            else:
+                per_tag[ch.tags] = [ch]
 
-        return tags
+        return per_tag
 
     # --- operations ---
 

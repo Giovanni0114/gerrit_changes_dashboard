@@ -422,34 +422,19 @@ class App:
                         map.extend([ch.id for ch in changes])
 
             case Layout.TAGS:
-                tags = sorted(self.changes.get_all_tags())
+                tags = self.changes.get_all_per_tag()
                 index_global = 1
 
-                data = {}
-                for tag in tags:
-                    changes = [ch for ch in self.changes.get_all() if tag in ch.comments]
+                for tag in sorted(tags):
+                    changes = tags[tag]
+                    if not changes:
+                        continue
 
-                    if changes:
-                        data[tag] = changes
-
-                data = _merge_identical_values(data)
-                for tag, changes in data.items():
                     tables.append(
                         build_table(changes, self.input.selected_rows(), header_text=tag, index_start_at=index_global)
                     )
                     index_global += len(changes)
                     map.extend([ch.id for ch in changes])
-
-                no_tags = [ch for ch in self.changes.get_all() if all(not com.startswith("#") for com in ch.comments)]
-
-                if no_tags:
-                    tables.append(
-                        build_table(
-                            no_tags, self.input.selected_rows(), header_text="no tags", index_start_at=index_global
-                        )
-                    )
-
-                    map.extend([ch.id for ch in no_tags])
 
         return tables, map
 

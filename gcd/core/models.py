@@ -77,6 +77,16 @@ class TrackedChange:
         super().__setattr__(name, value)
 
     @property
+    def tags(self) -> str | None:
+        def _is_tag(comment: str) -> bool:
+            return comment.startswith("#") and " " not in comment
+
+        if self.comments:
+            return " ".join([comment for comment in self.comments if _is_tag(comment)])
+
+        return None
+
+    @property
     def id(self) -> str:
         return f"{self.number}:{self.instance}"
 
