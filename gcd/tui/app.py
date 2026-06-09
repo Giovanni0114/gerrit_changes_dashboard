@@ -396,20 +396,34 @@ class App:
 
     def make_tables(self) -> list[Table]:
         tables = []
+        map = []
 
         match self.config.layout:
             case Layout.DEFAULT:
                 tables.append(build_table(self.changes.get_all(), self.input.selected_rows()))
+                map.extend([ch.id for ch in self.changes.get_all()])
 
             case Layout.INSTANCES:
+                index_global = 1
                 for instance in self.config.instances:
                     changes = [ch for ch in self.changes.get_all() if ch.instance == instance.name]
 
                     if changes:
-                        tables.append(build_table(changes, self.input.selected_rows(), header_text=instance.name))
+                        tables.append(
+                            build_table(
+                                changes,
+                                self.input.selected_rows(),
+                                header_text=instance.name,
+                                index_start_at=index_global,
+                            )
+                        )
+
+                        index_global += len(changes)
+                        map.extend([ch.id for ch in changes])
 
             case Layout.TAGS:
                 tags = sorted(self.changes.get_all_tags())
+                index_global = 1
 
                 data = {}
                 for tag in tags:
@@ -420,26 +434,38 @@ class App:
 
                 data = _merge_identical_values(data)
                 for tag, changes in data.items():
-                    tables.append(build_table(changes, self.input.selected_rows(), header_text=tag))
+                    tables.append(
+                        build_table(changes, self.input.selected_rows(), header_text=tag, index_start_at=index_global)
+                    )
+                    index_global += len(changes)
+                    map.extend([ch.id for ch in changes])
 
                 no_tags = [ch for ch in self.changes.get_all() if all(not com.startswith("#") for com in ch.comments)]
 
                 if no_tags:
-                    tables.append(build_table(no_tags, self.input.selected_rows(), header_text="no tags"))
+                    tables.append(
+                        build_table(
+                            no_tags, self.input.selected_rows(), header_text="no tags", index_start_at=index_global
+                        )
+                    )
 
-        return tables
+                    map.extend([ch.id for ch in no_tags])
+
+        return tables, map
 
     def build(self, prompt_msg: str = "") -> Group:
         """Build the display layout (header, optional prompt, table with hints in caption)."""
         header = build_header(ssh_requests=self.gerrit_comm.ssh_request_count)
 
-        tables = self.make_tables()
+        tables, map = self.make_tables()
 
         footer = build_footer(
             self.config,
             self.status_msg,
             self.input.hints(),
         )
+
+        self.changes.set_map(map)
 
         return build_layout(header, tables, footer, prompt=prompt_msg, show_header=self.config.show_header)
 

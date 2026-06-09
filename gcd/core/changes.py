@@ -1,22 +1,22 @@
 import json
-from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 
 from gcd.core.models import TrackedChange
 
 
-@dataclass
 class Changes:
     path: Path
     _changes: list[TrackedChange]
 
     _file_mtime: float
     _list_dirty: bool
+    _index_map: list
 
     def __init__(self, path: Path) -> None:
         self.path = path
         self._changes = []
+        self._index_map = []
+
         self._list_dirty = False
 
         if not self.path.exists() or self.path.stat().st_size == 0:
@@ -49,24 +49,15 @@ class Changes:
         if idx < 0 or idx >= len(self._changes):
             return None
 
-        return self._changes[idx]
+        ch_id = self._index_map[idx]
+        for ch in self._changes:
+            if ch.id == ch_id:
+                return ch
 
-    # --- contextmanagers ---
+        return None
 
-    @contextmanager
-    def edit_change(self, idx: int):
-        if idx < 0 or idx >= len(self._changes):
-            yield None
-            return
-
-        yield self._changes[idx]
-        self.save_changes()
-
-    @contextmanager
-    def edit_changes(self, indexes: list[int]):
-        valid = [self._changes[i] for i in indexes if 0 <= i < len(self._changes)]
-        yield valid
-        self.save_changes()
+    def set_map(self, map: list) -> None:
+        self._index_map = map
 
     # --- getters ---
 

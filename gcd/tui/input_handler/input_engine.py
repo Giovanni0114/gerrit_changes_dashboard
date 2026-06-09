@@ -81,15 +81,6 @@ TOP_LEVEL_ACTIONS = {
     "<tab>": LeafAction(toggle_layout, [], "Toggle layout"),
 }
 
-ALLOWED_IN_NON_DEFAULT_LAYER = [
-    "<enter>",
-    "r",
-    "q",
-    "f",
-    "e",
-    "<tab>",
-]
-
 # --- Comment sub-actions ---
 COMMENT_ACTIONS: dict[str, LeafAction] = {
     "a": LeafAction(comment_add, [input_idx_factory(), TEXT_FIELD], "add"),
@@ -141,13 +132,6 @@ def key_allowed_in_sequence(key: str, sequence: Iterable[str]) -> bool:
             return key in COMMENT_ACTIONS
 
     return False
-
-
-def key_allowed_in_layout(key: str, layout: Layout) -> bool:
-    if layout == Layout.DEFAULT:
-        return True
-    else:
-        return key in ALLOWED_IN_NON_DEFAULT_LAYER
 
 
 def match_action(sequence: list[str]) -> LeafAction | None:
@@ -235,10 +219,6 @@ class InputHandler:
 
         if not key_allowed_in_sequence(key, self.sequence):
             self.app_context.status_msg = f"key not allowed in sequence : {key} {self.sequence}"
-            return
-
-        if not key_allowed_in_layout(key, self.app_context.config.layout):
-            self.app_context.status_msg = f"key '{key}' not allowed in layout '{self.app_context.config.layout.name}'"
             return
 
         if key == "<enter>":

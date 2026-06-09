@@ -87,6 +87,7 @@ def build_table(
     changes: list[TrackedChange],
     selected_rows: frozenset[int] | None = None,
     header_text: str | None = None,
+    index_start_at: int = 1,
 ) -> Table:
     table = Table(
         expand=True,
@@ -98,8 +99,7 @@ def build_table(
         title_style="bold white reverse",
     )
 
-    if header_text is None:
-        table.add_column("idx", style="dim", no_wrap=True, width=2)
+    table.add_column("idx", style="dim", no_wrap=True, width=2)
 
     table.add_column("Number", style="magenta", no_wrap=True, width=6)
     table.add_column("Project", no_wrap=True, width=20)
@@ -108,7 +108,7 @@ def build_table(
     table.add_column("Approvals", no_wrap=False, ratio=35)
 
     selected = selected_rows or frozenset()
-    for idx, ch in enumerate(changes, 1):
+    for idx, ch in enumerate(changes, index_start_at):
         styles = {
             "idx": "dim",
             "number": "magenta",
@@ -182,7 +182,7 @@ def build_table(
 
         comments_text = comments_text or enumerate_comments(ch.comments)
 
-        elements = [] if header_text else [Text(str(idx), style=styles["idx"])]
+        elements = [Text(str(idx), style=styles["idx"])]
 
         elements.extend(
             [
