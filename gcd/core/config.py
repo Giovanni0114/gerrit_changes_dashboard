@@ -169,7 +169,7 @@ class AppConfig:
         return self.layout
 
     def generate_rich_footnote(self) -> str:
-        footnote = f"[dim]interval[/dim]: {self.interval}s"
+        footnote = f"[dim]interval:[/dim] {self.interval}s"
         # footnote += f" | [dim]layout[/dim]: {self.layout.name}"
         return footnote
 

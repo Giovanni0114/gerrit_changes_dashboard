@@ -440,7 +440,7 @@ class App:
 
     def build(self, prompt_msg: str = "") -> Group:
         """Build the display layout (header, optional prompt, table with hints in caption)."""
-        header = build_header(ssh_requests=self.gerrit_comm.ssh_request_count)
+        header = build_header()
 
         tables, map = self.make_tables()
 
@@ -448,6 +448,8 @@ class App:
             self.config,
             self.status_msg,
             self.input.hints(),
+
+            ssh_requests=self.gerrit_comm.ssh_request_count,
         )
 
         self.changes.set_map(map)

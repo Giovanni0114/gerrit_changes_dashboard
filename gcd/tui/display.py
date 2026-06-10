@@ -50,29 +50,35 @@ def enumerate_comments(comments: List[str]) -> str:
     if len(comments) == 1:
         return comments[0]
 
-    tags = [s for s in comments if s.startswith("#")]
-    rest = [s for s in comments if not s.startswith("#")]
+    comments_sections = []
 
-    result = ""
+    tags = [s for s in comments if s.startswith("#")]
+
 
     if tags:
-        result += " ".join(tags)
+        comments_sections.append(" ".join(tags))
 
-    if tags and rest:
-        result += "\n"
+    normal_comments = ""
 
-    if rest:
-        result += "\n".join(f"{idx}. {comment}" for idx, comment in enumerate(rest, 1))
+    for idx, comment in enumerate(comments, 1):
+        if not comment.startswith("#"):
+            normal_comments += f"{idx}. {comment}"
 
-    return result
+    if normal_comments:
+        comments_sections.append(normal_comments)
+
+    return "\n".join(comments_sections)
 
 
 def build_footer(
     config: AppConfig,
     status_msg: str = "",
     hints: str = "",
+    ssh_requests: int = 0,
 ) -> Text:
-    caption = f"[dim]config:[/dim] {config.path} | {config.generate_rich_footnote()}"
+    caption = (
+        f"[dim]config:[/dim] {config.path} | {config.generate_rich_footnote()} | [dim]ssh counter:[/dim] {ssh_requests}"
+    )
 
     if hints:
         caption += f"\n[dim]{hints}[/dim]"
@@ -202,8 +208,8 @@ def build_table(
     return table
 
 
-def build_header(ssh_requests: int = 0) -> Panel:
-    header_text = f"Gerrit Approvals  (refreshed {datetime.now():%H:%M:%S})  ssh requests: {ssh_requests}"
+def build_header() -> Panel:
+    header_text = f"Gerrit Approvals  (refreshed {datetime.now():%H:%M:%S})"
     centered_text = Text(header_text, justify="center")
     return Panel(centered_text, expand=True, style="")
 
