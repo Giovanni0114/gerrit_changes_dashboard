@@ -185,6 +185,7 @@ def build_table(
         if idx in selected:
             styles["subject"] += " underline"
             styles["project"] += " underline"
+            styles["number"] += " underline"
 
         comments_text = comments_text or enumerate_comments(ch.comments)
 
