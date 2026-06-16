@@ -72,6 +72,15 @@ class AppConfig:
         if self.ui_refresh_rate < 1:
             raise ValueError(f"refresh rate must be >= 1, got {self.ui_refresh_rate}")
 
+        default_layout = config_data.get("default_layout", Layout.DEFAULT.value)
+        try:
+            self.layout = Layout(default_layout)
+        except ValueError as ex:
+            valid_layouts = ", ".join(layout.value for layout in Layout)
+            raise ValueError(
+                f"Invalid default_layout value: {default_layout}. Expected one of: {valid_layouts}"
+            ) from ex
+
         changes_file_filename = config_data.get("changes_file", DEFAULT_CHANGES_FILENAME)
         self.changes_path = (self.path.parent / changes_file_filename).resolve()
         if not self.changes_path.parent.exists():
@@ -182,6 +191,7 @@ def generate_example_config(path: Path) -> None:
         "[config]\n"
         'default_host = "gerrit.example.com"\n'
         "default_port = 22\n"
+        f'# default_layout = "{Layout.DEFAULT.value}"  # one of: {", ".join(layout.value for layout in Layout)}\n'
         "# interval = 30\n"
         "# ui_refresh_rate = 20 \n"
         '# changes_file = "./changes.json"  # path relative to this file\n'
