@@ -100,6 +100,16 @@ class Changes:
 
         return per_tag
 
+    def get_all_per_project(self) -> dict[str, list[TrackedChange]]:
+        per_project = {}
+        for ch in self._changes:
+            if ch.project in per_project:
+                per_project[ch.project].append(ch)
+            else:
+                per_project[ch.project] = [ch]
+
+        return per_project
+
     # --- operations ---
 
     def remove_all_deleted(self):

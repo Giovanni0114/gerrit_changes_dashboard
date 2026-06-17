@@ -16,6 +16,7 @@ class Layout(Enum):
     DEFAULT = "default"
     INSTANCES = "per_instance"
     TAGS = "per_tags"
+    PROJECTS = "per_projects"
 
 
 class AppConfig:
@@ -168,13 +169,9 @@ class AppConfig:
         return 1 / self.ui_refresh_rate
 
     def next_layout(self) -> Layout:
-        if self.layout == Layout.DEFAULT:
-            self.layout = Layout.INSTANCES
-        elif self.layout == Layout.INSTANCES:
-            self.layout = Layout.TAGS
-        else:
-            self.layout = Layout.DEFAULT
-
+        layouts = list(Layout)
+        current_index = layouts.index(self.layout)
+        self.layout = layouts[(current_index + 1) % len(layouts)]
         return self.layout
 
     def generate_rich_footnote(self) -> str:

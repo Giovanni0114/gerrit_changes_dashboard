@@ -436,6 +436,24 @@ class App:
                     index_global += len(changes)
                     map.extend([ch.id for ch in changes])
 
+            case Layout.PROJECTS:
+                per_projects = self.changes.get_all_per_project()
+                index_global = 1
+
+                for project in sorted(per_projects):
+                    changes = per_projects[project]
+                    if not changes:
+                        continue
+
+                    tables.append(
+                        build_table(
+                            changes, self.input.selected_rows(), header_text=project, index_start_at=index_global
+                        )
+                    )
+
+                    index_global += len(changes)
+                    map.extend([ch.id for ch in changes])
+
         return tables, map
 
     def build(self, prompt_msg: str = "") -> Group:
@@ -448,7 +466,6 @@ class App:
             self.config,
             self.status_msg,
             self.input.hints(),
-
             ssh_requests=self.gerrit_comm.ssh_request_count,
         )
 
