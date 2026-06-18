@@ -8,8 +8,6 @@ from gcd.core.models import AppContext, Index
 if TYPE_CHECKING:
     from .input_engine import LeafAction
 
-Context = dict[str, str]
-
 
 @dataclass(frozen=True)
 class InputField:

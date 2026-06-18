@@ -18,6 +18,7 @@ from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
 from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
+from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
 from gcd.tui.display import build_footer, build_header, build_layout, build_table
 from gcd.tui.input_handler import InputHandler
@@ -48,7 +49,7 @@ def _merge_identical_values(data: dict[str, list[TrackedChange]]):
     return result
 
 
-def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None:
+def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache, plugin_manager: PluginManager) -> None:
     if ch is None:
         return
 
@@ -61,24 +62,38 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache) -> None
     ch.subject = data.get("subject")
     ch.project = data.get("project")
     ch.url = data.get("url")
-    patch_set = data.get("currentPatchSet", {})
-    if patch_set:
-        ch.current_revision = patch_set.get("revision")
-        raw = patch_set.get("approvals", [])
-        ch.approvals = [
-            ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", "")) for a in raw
-        ]
-    else:
-        ch.approvals = []
 
-    new_snapshot = frozenset((a.label, a.value, a.by) for a in ch.approvals)
-    if ch.waiting and ch._snapshot and new_snapshot != ch._snapshot:
+    patch_set = data.get("currentPatchSet", {})
+    ch.current_revision = patch_set.get("revision")
+    ch.current_patchset_number = patch_set.get("number")
+    new_approvals = [
+        ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", ""))
+        for a in patch_set.get("approvals", [])
+    ]
+
+    old_snapshot = ch._snapshot
+    new_snapshot = frozenset((a.label, a.value, a.by) for a in new_approvals)
+    ch.approvals = new_approvals
+
+    # Only emit once we have a baseline — otherwise every approval looks "new" on first hydration.
+    if old_snapshot:
+        for approval in new_approvals:
+            if (approval.label, approval.value, approval.by) not in old_snapshot:
+                plugin_manager.emit("new_approval", ch.instance, ch.id, approval)
+
+    if ch.waiting and old_snapshot and new_snapshot != old_snapshot:
         ch.waiting = False
+        plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", False))
 
     ch._snapshot = new_snapshot
+
+    was_submitted = ch.submitted
     ch.submitted = any(a.is_submitted() for a in ch.approvals)
     ch.abandoned = data.get("status") == "ABANDONED"
     ch.is_wip = bool(data.get("wip", False))
+
+    if ch.submitted != was_submitted:
+        plugin_manager.emit("status_changed", ch.instance, ch.id, ("submitted", ch.submitted))
 
     cache.cache(ch)
 
@@ -89,6 +104,7 @@ class App:
         self.changes = Changes(self.config.changes_path)
         self.cache = SshCache(self.config.cache_path)
         self.gerrit_comm = GerritCommunication()
+        self.plugin_manager = PluginManager(self)
 
         self.status_msg: str = ""
         self.exit_msg: str = ""
@@ -107,13 +123,15 @@ class App:
         self._sync_cache_with_changes()
 
         _log.info(
-            "app init config=%s changes=%s cache=%s instances=%d tracked=%d",
-            self.config.path,
-            self.changes.path,
+            "app init config=%s instances=%d tracked=%d plugins=%d",
             self.config.cache_path,
             len(self.config.instances),
             self.changes.count(),
+            len(self.plugin_manager.plugins_per_instance),
         )
+
+        self.plugin_manager.setup()
+        _log.info(f"app plugins after setup: {self.plugin_manager.plugins_per_instance}")
 
     def _sync_cache_with_changes(self) -> None:
         """Evict orphaned cache entries and hydrate tracked changes from cache."""
@@ -153,7 +171,7 @@ class App:
 
         with ThreadPoolExecutor(max_workers=len(changes) or 1) as pool:
             for ch, data in pool.map(self._query, changes):
-                _store_result(ch, data, self.cache)
+                _store_result(ch, data, self.cache, self.plugin_manager)
 
     def query_active_changes(self) -> None:
         self._do_query(self.changes.get_running())
@@ -486,6 +504,7 @@ class App:
 
         for ch in rows.resolve(self.changes):
             ch.waiting = not ch.waiting
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", ch.waiting))
 
     def toggle_all_waiting(self) -> None:
         if not (candidates := self.changes.get_active()):
@@ -494,7 +513,10 @@ class App:
 
         target = not all(ch.waiting for ch in candidates)
         for ch in candidates:
+            if ch.waiting == target:
+                continue
             ch.waiting = target
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", target))
 
     def toggle_deleted(self, rows: Index) -> None:
         if rows.wildcard:
@@ -502,6 +524,7 @@ class App:
 
         for ch in rows.resolve(self.changes):
             ch.deleted = not ch.deleted
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", ch.deleted))
 
     def toggle_all_deleted(self) -> None:
         if not (candidates := self.changes.get_all()):
@@ -510,7 +533,10 @@ class App:
 
         target = not all(ch.deleted for ch in candidates)
         for ch in candidates:
+            if ch.deleted == target:
+                continue
             ch.deleted = target
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", target))
 
     def toggle_disabled(self, rows: Index) -> None:
         if rows.wildcard:
@@ -518,6 +544,7 @@ class App:
 
         for ch in rows.resolve(self.changes):
             ch.disabled = not ch.disabled
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("disabled", ch.disabled))
 
     def toggle_all_disabled(self) -> None:
         candidates = self.changes.get_active()
@@ -527,7 +554,10 @@ class App:
 
         target = not all(ch.disabled for ch in candidates)
         for ch in candidates:
+            if ch.disabled == target:
+                continue
             ch.disabled = target
+            self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("disabled", target))
 
     def refresh_all(self) -> None:
         # I know this is not a obvious place for cleaning status msg but I want to have easy way for it
@@ -543,6 +573,7 @@ class App:
     def add_change(self, number: int, instance: str) -> None:
         new_change = TrackedChange(number=number, instance=instance)
         self.changes.append(new_change)
+        self.plugin_manager.emit("new_change", new_change.instance, new_change.id, new_change)
         self.status_msg = f"[green]Added {number} @ {instance}[/green]"
         _log.info("change added number=%d instance=%s", number, instance)
 
@@ -552,6 +583,7 @@ class App:
             if not ch.deleted:
                 count += 1
                 ch.deleted = True
+                self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", True))
 
         if count > 0:
             self.status_msg = f"[red]{count} submitted change(s) marked for deletion[/red]"
@@ -574,6 +606,7 @@ class App:
             if ch.deleted:
                 count += 1
                 ch.deleted = False
+                self.plugin_manager.emit("status_changed", ch.instance, ch.id, ("deleted", False))
 
         if count > 0:
             self.status_msg = f"[green]{count} change(s) restored[/green]"
@@ -600,8 +633,9 @@ class App:
                 continue
 
             ch = TrackedChange(number=number, instance=instance.name)
-            _store_result(ch, change_data, self.cache)
+            _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
+            self.plugin_manager.emit("new_change", ch.instance, ch.id, ch)
             numbers_in_changes.add(number)
             added += 1
 
@@ -632,6 +666,8 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._add_comment(ch, text)
 
+            self.plugin_manager.emit("new_comment", ch.instance, ch.id, text)
+
     def _add_comment(self, ch: TrackedChange, text: str) -> None:
         ch.comments = [*ch.comments, text]
 
@@ -639,12 +675,16 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._replace_all_comments(ch, text)
 
+            self.plugin_manager.emit("new_comment", ch.instance, ch.id, text)
+
     def _replace_all_comments(self, ch: TrackedChange, text: str) -> None:
         ch.comments = [text]
 
     def edit_last_comment(self, rows: Index, text: str) -> None:
         for ch in self._resolve_index_for_all(rows):
             self._edit_last_comment(ch, text)
+
+            self.plugin_manager.emit("new_comment", ch.instance, ch.id, text)
 
     def _edit_last_comment(self, ch: TrackedChange, text: str) -> None:
         if ch.comments:
@@ -726,6 +766,7 @@ class App:
         """Run initial queries, start threads, enter main loop."""
         self.query_active_changes()
         self.query_disabled_once()
+        self.plugin_manager.init()
 
         reader_thread = Thread(target=self._key_reader, daemon=True)
         reader_thread.start()
@@ -767,6 +808,7 @@ class App:
             pass
         finally:
             self.changes.save_changes()
+            self.plugin_manager.shutdown()
             _console.print(f"\n[dim]Stopped. {self.exit_msg} {self.changes.count()} change(s) saved. Bye![/dim]")
 
     def _check_pending_input(self) -> None:
@@ -838,13 +880,12 @@ def main() -> None:
         sys.exit(1)
 
     config = AppConfig(config_path)
+    setup_logging(config.log_path)
+    _log.info("startup config=%s logs=%s", config_path, config.log_path)
 
     if args.clear_cache:
         config.cache_path.unlink(missing_ok=True)
-        print(f"Cleared cache: {config.cache_path}")
-
-    log_path = setup_logging(config.log_path)
-    app_logger().info("startup config=%s logs=%s", config_path, log_path)
+        _log.info("cleared cache=%s", config.cache_path)
 
     with NoEcho():
         app = App(config)

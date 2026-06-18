@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 from gcd.core.utils import get_email_from_git_config
+from gcd.core.logs import plugin_logger
 
 if TYPE_CHECKING:
     from gcd.core import changes, config
+
+Context = dict[str, str]
 
 
 @dataclass
@@ -26,6 +30,7 @@ class GerritInstance:
     host: str
     port: int
     email: str | None
+    enabled_plugins: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if self.email is None:
@@ -43,10 +48,16 @@ _TRACKED = frozenset(
 _SENTINEL = object()
 
 
+@dataclass(frozen=True)
+class ChangeIdentifier:
+    number: int
+    instance: str
+
+
 @dataclass
 class TrackedChange:
     number: int
-    instance: str = "default"
+    instance: str
 
     comments: list[str] = field(default_factory=list)
     approvals: list[ApprovalEntry] = field(default_factory=list)
@@ -63,10 +74,15 @@ class TrackedChange:
     project: str | None = None
     url: str | None = None
     current_revision: str | None = None
+    current_patchset_number: int | None = None
     error: str | None = None
-    _snapshot: frozenset[tuple[str, str, str]] = field(default_factory=frozenset, repr=False, compare=False)
+    _snapshot: frozenset[tuple[str, str, str]] = field(default_factory=frozenset, repr=True, compare=True)
 
     modified: bool = field(default=False, init=False)
+
+    @property
+    def id(self) -> ChangeIdentifier:
+        return ChangeIdentifier(self.number, self.instance)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "modified", False)
@@ -166,3 +182,50 @@ class AppContext(Protocol):
     def edit_last_comment(self, row: Index, text: str) -> None: ...
     def delete_comment(self, row: Index, comment_idx: Index) -> None: ...
     def delete_all_comments(self, row: Index) -> None: ...
+
+
+class BasePlugin(ABC):
+    name: str = "base"
+    version: str = "0.0.0"
+    instance: str
+
+    def __init__(self, ctx: AppContext, instance: str):
+        self.enabled = True
+        self.ctx = ctx
+        self.instance = instance
+        self.log = plugin_logger(self.name, self.instance)
+
+        self.log.info(f"plugin initialized for instance={instance} version={self.version}")
+
+    def metadata(self) -> dict[str, str]:
+        return {"name": f"{self.name}:{self.version}"}
+
+    def __repr__(self) -> str:
+        return f"{self.name}:{self.version}"
+
+    @abstractmethod
+    def setup(self) -> None: ...
+
+    @abstractmethod
+    def on_exit(self) -> None: ...
+
+    @abstractmethod
+    def on_init(self) -> None: ...
+
+    @abstractmethod
+    def on_activate(self) -> None: ...
+
+    def on_new_comment(self, change_id: ChangeIdentifier, new_comment: str) -> None:
+        self.log.info("new_comment event handler not implemented")
+
+    def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
+        self.log.info("new_approval event handler not implemented")
+
+    def on_status_changed(self, change_id: ChangeIdentifier, new_status: tuple[str, bool]) -> None:
+        self.log.info("status_changed event handler not implemented")
+
+    def on_new_change(self, new_change: TrackedChange) -> None:
+        self.log.info("new_change event handler not implemented")
+
+
+PluginEvent = Literal["new_comment", "new_approval", "status_changed", "new_change"]

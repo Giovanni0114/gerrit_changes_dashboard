@@ -14,6 +14,7 @@ class CacheEntry:
     project: str | None = None
     url: str | None = None
     current_revision: str | None = None
+    current_patchset_number: int | None = None
     submitted: bool = False
     abandoned: bool = False
     is_wip: bool = False
@@ -26,6 +27,7 @@ class CacheEntry:
             project=ch.project,
             url=ch.url,
             current_revision=ch.current_revision,
+            current_patchset_number=ch.current_patchset_number,
             submitted=ch.submitted,
             abandoned=ch.abandoned,
             is_wip=ch.is_wip,
@@ -38,6 +40,7 @@ class CacheEntry:
             "project": self.project,
             "url": self.url,
             "current_revision": self.current_revision,
+            "current_patchset_number": self.current_patchset_number,
             "submitted": self.submitted,
             "abandoned": self.abandoned,
             "is_wip": self.is_wip,
@@ -56,6 +59,7 @@ class CacheEntry:
             project=data.get("project"),
             url=data.get("url"),
             current_revision=data.get("current_revision"),
+            current_patchset_number=data.get("current_patchset_number"),
             submitted=bool(data.get("submitted", False)),
             abandoned=bool(data.get("abandoned", False)),
             is_wip=bool(data.get("is_wip", False)),
