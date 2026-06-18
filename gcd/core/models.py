@@ -5,8 +5,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
-from gcd.core.utils import get_email_from_git_config
 from gcd.core.logs import plugin_logger
+from gcd.core.utils import get_email_from_git_config
 
 if TYPE_CHECKING:
     from gcd.core import changes, config
@@ -52,6 +52,9 @@ _SENTINEL = object()
 class ChangeIdentifier:
     number: int
     instance: str
+
+    def __repr__(self) -> str:
+        return f"{self.number}:{self.instance}"
 
 
 @dataclass
@@ -101,10 +104,6 @@ class TrackedChange:
             return " ".join([comment for comment in self.comments if _is_tag(comment)])
 
         return None
-
-    @property
-    def id(self) -> str:
-        return f"{self.number}:{self.instance}"
 
     def __hash__(self) -> int:
         return hash(self.id)

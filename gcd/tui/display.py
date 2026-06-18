@@ -54,7 +54,6 @@ def enumerate_comments(comments: List[str]) -> str:
 
     tags = [s for s in comments if s.startswith("#")]
 
-
     if tags:
         comments_sections.append(" ".join(tags))
 

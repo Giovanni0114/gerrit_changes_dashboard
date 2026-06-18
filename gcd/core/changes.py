@@ -1,9 +1,8 @@
 import json
 from pathlib import Path
-from sys import path_importer_cache
 
-from gcd.core.models import TrackedChange
 from gcd.core.logs import app_logger
+from gcd.core.models import TrackedChange
 
 _logger = app_logger()
 

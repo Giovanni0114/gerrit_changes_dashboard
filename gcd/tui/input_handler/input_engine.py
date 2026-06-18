@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Callable, Iterable
 
-from gcd.core.config import Layout
 from gcd.core.models import AppContext, Context, Index
 from gcd.core.utils import Arrow
 
