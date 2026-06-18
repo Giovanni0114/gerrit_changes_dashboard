@@ -13,6 +13,7 @@ from .parsers import (
     _file_path_parser,
     _float_parser,
     _int_parser,
+    _list_parser,
     _str_parser,
 )
 
@@ -44,6 +45,7 @@ _FIELDS: list[Field] = [
     Field("cache_path", "cache_file", _file_path_parser(DEFAULT_CACHE_FILENAME), example='"./cache.json"'),
     Field("log_path", "log_dir", _dir_path_parser(DEFAULT_LOG_DIRNAME), example='"./log"'),
     Field("show_header", "show_header", _bool_parser(False)),
+    Field("hide_tags", "hide_tags", _list_parser(), example='["#HIDE"]'),
     Field("_editor", "editor", _str_parser(None), example='"vim"'),
 ]
 
@@ -57,6 +59,7 @@ class AppConfig:
     changes_path: Path
     cache_path: Path
     log_path: Path
+    hide_tags: list[str]
 
     show_header: bool | None
     layout: Layout = Layout.DEFAULT
