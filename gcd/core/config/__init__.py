@@ -50,22 +50,22 @@ _FIELDS: list[Field] = [
 
 class AppConfig:
     path: Path
+    _file_mtime: float
 
     interval: int
     ui_refresh_rate: float
     changes_path: Path
     cache_path: Path
     log_path: Path
+
     show_header: bool | None
     layout: Layout = Layout.DEFAULT
-
-    _instances: list[GerritInstance]
+    instances: list[GerritInstance]
     _editor: str | None = None
-    _file_mtime: float
 
     def __init__(self, path: Path) -> None:
         self.path = path
-        self._instances = []
+        self.instances = []
         self.load_config()
 
     def is_file_changed(self) -> bool:
@@ -89,82 +89,48 @@ class AppConfig:
         for field in _FIELDS:
             setattr(self, field.attr, field.read(config_data, base_dir))
 
-        self._instances = self._parse_instances(data, config_data)
+        self._parse_instances(data, config_data)
         self._file_mtime = self._mtime()
 
-    @staticmethod
-    def _parse_instances(data: dict, config_data: dict) -> list[GerritInstance]:
-        default_host = config_data.get("default_host")
+    def _parse_instances(self, data: dict, config_data: dict) -> None:
         default_port = config_data.get("default_port")
         default_email = config_data.get("default_email")
         default_plugins = config_data.get("default_plugins_enabled", [])
 
-        instances: list[GerritInstance] = []
-
-        if default_host and default_port:
-            instances.append(
-                GerritInstance(
-                    name="default",
-                    host=default_host,
-                    port=default_port,
-                    email=default_email,
-                    enabled_plugins=frozenset(default_plugins),
-                )
-            )
-
         for name, ins in data.get("instance", {}).items():
-            host = ins.get("host") or default_host
+            host = ins.get("host")
             port = ins.get("port") or default_port
+
             if not (host and port):
                 continue
-            instances.append(
-                GerritInstance(
-                    name=name,
-                    host=host,
-                    port=port,
-                    email=ins.get("email") or default_email,
-                    enabled_plugins=frozenset(ins.get("plugins_enabled", []) + default_plugins),
-                )
-            )
 
-        if not instances:
+            email = ins.get("email") or default_email
+            enabled_plugins = frozenset(ins.get("plugins_enabled", []) + default_plugins)
+
+            self.instances.append(GerritInstance(name, host, port, email, enabled_plugins))
+
+        if not self.instances:
             raise ValueError("No Gerrit instances configured. Please specify at least one instance in the config file.")
 
-        names = [ins.name for ins in instances]
+        names = [ins.name for ins in self.instances]
         if len(set(names)) != len(names):
             raise ValueError("Instance names must be unique.")
 
-        return instances
-
-    @property
-    def default_host(self) -> str:
-        return self.default_instance.host
-
-    @property
-    def default_port(self) -> int:
-        return self.default_instance.port
-
     @property
     def default_instance(self) -> GerritInstance:
-        if len(self._instances) == 0:
+        if len(self.instances) == 0:
             raise ValueError("No Gerrit instances configured")
-        return self._instances[0]
-
-    @property
-    def instances(self) -> list[GerritInstance]:
-        return self._instances
+        return self.instances[0]
 
     def get_instance_by_name(self, name: str) -> GerritInstance | None:
-        for ins in self._instances:
+        for ins in self.instances:
             if ins.name == name:
                 return ins
         return None
 
     @property
     def editor(self) -> str | None:
-        if self._editor is not None:
-            return self._editor
-        return os.environ.get("EDITOR") or None
+        return self._editor or os.environ.get("EDITOR") or None
 
     @property
     def ui_refresh_interval_sec(self) -> float:
@@ -183,12 +149,12 @@ class AppConfig:
 
     def get_all_enabled_plugins(self) -> set[str]:
         enabled_plugins: set[str] = set()
-        for ins in self._instances:
+        for ins in self.instances:
             enabled_plugins.update(ins.enabled_plugins)
         return enabled_plugins
 
     def get_enabled_plugins_per_instance(self) -> dict[str, frozenset[str]]:
-        return {ins.name: ins.enabled_plugins for ins in self._instances}
+        return {ins.name: ins.enabled_plugins for ins in self.instances}
 
 
 def generate_example_config(path: Path) -> None:
