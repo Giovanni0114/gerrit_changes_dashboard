@@ -1,3 +1,4 @@
+import re
 import shlex
 import subprocess
 import time
@@ -25,6 +26,7 @@ from gcd.tui.input_handler import InputHandler
 
 _console = Console()
 _log = app_logger()
+_LINK_RE = re.compile(r"https?://\S+")
 
 EditorTarget = Literal["changes", "config"]
 
@@ -705,6 +707,17 @@ class App:
             if 0 <= idx < len(new):
                 new.pop(idx)
         ch.comments = new
+
+    def open_comment_link(self, rows: Index, comment_idx: Index) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            comments = ch.comments
+            if comment_idx.wildcard:
+                targets = comments
+            else:
+                targets = [comments[ci - 1] for ci in comment_idx if 0 < ci <= len(comments)]
+            for comment in targets:
+                for url in _LINK_RE.findall(comment):
+                    webbrowser.open(url.rstrip(".,);:"))
 
     # --- Threading ---
 

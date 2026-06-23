@@ -14,6 +14,7 @@ from .context_actions import (
     handle_deletion,
     open_change,
     open_changes_in_editor,
+    open_comment_link,
     open_config_in_editor,
     quit_app,
     refresh,
@@ -86,6 +87,7 @@ COMMENT_ACTIONS: dict[str, LeafAction] = {
     "A": LeafAction(comment_replace_all, [input_idx_factory(), TEXT_FIELD], "replace all"),
     "e": LeafAction(comment_edit_last, [input_idx_factory(), TEXT_FIELD], "edit last"),
     "d": LeafAction(comment_delete, [input_idx_factory(), COMMENT_IDX_FIELD], "delete"),
+    "o": LeafAction(open_comment_link, [input_idx_factory(), COMMENT_IDX_FIELD], "open link"),
 }
 
 # --- Review sub-actions ---

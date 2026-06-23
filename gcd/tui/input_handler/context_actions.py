@@ -146,6 +146,19 @@ def comment_delete(app_ctx: AppContext, ctx: Context) -> None:
     app_ctx.delete_comment(idx, cidx)
 
 
+def open_comment_link(app_ctx: AppContext, ctx: Context) -> None:
+    """Open all URLs found in the specified comment(s)."""
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    if (cidx := parse_idx_notation(ctx["comment_idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid comment idx parsed from: {ctx['comment_idx']}[/red]"
+        return
+
+    app_ctx.open_comment_link(idx, cidx)
+
+
 def review_abandon_action(app_ctx: AppContext, ctx: Context) -> None:
     if ctx.get("confirm") != "y":
         app_ctx.status_msg = "[yellow]Abandon cancelled[/yellow]"
