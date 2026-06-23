@@ -74,17 +74,26 @@ def enumerate_comments(comments: List[str]) -> str:
 _URL_RE = re.compile(r"https?://\S+")
 
 
+def _clean_url(raw_url: str) -> str:
+    """Drop trailing punctuation that the greedy `\\S+` match swallows."""
+    return raw_url.rstrip(".,);:")
+
+
+def extract_urls(text: str) -> list[str]:
+    """Return cleaned URLs found in text, deduplicated and order-preserving."""
+    return list(dict.fromkeys(_clean_url(m.group()) for m in _URL_RE.finditer(text)))
+
+
 def linkify_text(text: str, style: str = "") -> Text:
     result = Text(style=style)
     last = 0
     for m in _URL_RE.finditer(text):
-        # DONT ASK ME HOW IT WORKS, IT WORKS
-        raw_url = m.group()
-        url = raw_url.rstrip(".,);:")
+        url = _clean_url(m.group())
         parsed = urllib.parse.urlparse(url)
         hostname = parsed.hostname or url
         result.append(text[last : m.start()])
         result.append(f"[{hostname}]", style=f"link {url}")
+        # Advance by the cleaned length so stripped punctuation stays as text.
         last = m.start() + len(url)
     result.append(text[last:])
     return result

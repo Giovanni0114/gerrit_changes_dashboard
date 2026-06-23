@@ -1,4 +1,3 @@
-import re
 import shlex
 import subprocess
 import time
@@ -21,12 +20,17 @@ from gcd.core.logs import app_logger
 from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
 from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
-from gcd.tui.display import build_footer, build_header, build_layout, build_table
+from gcd.tui.display import (
+    build_footer,
+    build_header,
+    build_layout,
+    build_table,
+    extract_urls,
+)
 from gcd.tui.input_handler import InputHandler
 
 _console = Console()
 _log = app_logger()
-_LINK_RE = re.compile(r"https?://\S+")
 
 EditorTarget = Literal["changes", "config"]
 
@@ -715,9 +719,8 @@ class App:
                 targets = comments
             else:
                 targets = [comments[ci - 1] for ci in comment_idx if 0 < ci <= len(comments)]
-            for comment in targets:
-                for url in _LINK_RE.findall(comment):
-                    webbrowser.open(url.rstrip(".,);:"))
+            for url in extract_urls("\n".join(targets)):
+                webbrowser.open(url)
 
     # --- Threading ---
 
