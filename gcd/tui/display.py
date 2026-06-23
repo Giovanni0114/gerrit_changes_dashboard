@@ -1,3 +1,5 @@
+import re
+import urllib.parse
 from datetime import datetime
 from typing import Iterable, List
 
@@ -61,12 +63,31 @@ def enumerate_comments(comments: List[str]) -> str:
 
     for idx, comment in enumerate(comments, 1):
         if not comment.startswith("#"):
-            normal_comments += f"{idx}. {comment}"
+            normal_comments += f"{idx}. {comment}\n"
 
     if normal_comments:
         comments_sections.append(normal_comments)
 
     return "\n".join(comments_sections)
+
+
+_URL_RE = re.compile(r"https?://\S+")
+
+
+def linkify_text(text: str, style: str = "") -> Text:
+    result = Text(style=style)
+    last = 0
+    for m in _URL_RE.finditer(text):
+        # DONT ASK ME HOW IT WORKS, IT WORKS
+        raw_url = m.group()
+        url = raw_url.rstrip(".,);:")
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or url
+        result.append(text[last : m.start()])
+        result.append(f"[{hostname}]", style=f"link {url}")
+        last = m.start() + len(url)
+    result.append(text[last:])
+    return result
 
 
 def build_footer(
@@ -195,7 +216,7 @@ def build_table(
                 Text(number_text, style=styles["number"]),
                 Text(project_text, style=styles["project"]),
                 Text(subject_text, style=styles["subject"]),
-                Text(comments_text, style=styles["comments"]),
+                linkify_text(comments_text, style=styles["comments"]),
             ]
         )
 
