@@ -188,22 +188,21 @@ class BasePlugin(ABC):
     version: str = "0.0.0"
     instance: str
 
-    def __init__(self, ctx: AppContext, instance: str):
+    def __init__(self, ctx: AppContext, instance: str, config: dict):
         self.enabled = True
         self.ctx = ctx
+        self.config = config
         self.instance = instance
         self.log = plugin_logger(self.name, self.instance)
 
         self.log.info(f"plugin initialized for instance={instance} version={self.version}")
+        self.log.info(f"config keys=[{', '.join(self.config.keys())}]")
 
     def metadata(self) -> dict[str, str]:
         return {"name": f"{self.name}:{self.version}"}
 
     def __repr__(self) -> str:
         return f"{self.name}:{self.version}"
-
-    @abstractmethod
-    def setup(self) -> None: ...
 
     @abstractmethod
     def on_exit(self) -> None: ...

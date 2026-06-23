@@ -51,24 +51,18 @@ class PluginManager:
             for plugin in enabled_plugins_per_instance[instance]:
                 if plugin not in plugin_classes:
                     raise ValueError(f"Plugin {plugin} defined for instance {instance} doesn't exits!")
-                self.plugins_per_instance[instance].append(plugin_classes[plugin](ctx, instance))
+                config = ctx.config.get_config_for_plugin(plugin, instance)
+                self.plugins_per_instance[instance].append(plugin_classes[plugin](ctx, instance, config))
 
     @property
     def plugins(self) -> list[BasePlugin]:
         return [pl for pls in self.plugins_per_instance.values() for pl in pls]
 
-    def setup(self) -> None:
-        """Called on start of application"""
-        for plugin in self.plugins:
-            self._safe_call(plugin, "setup")
-
     def init(self) -> None:
-        """Called when app is ready and changes are loaded"""
         for plugin in self.plugins:
             self._safe_call(plugin, "on_init")
 
     def emit(self, event: PluginEvent, source_instance: str, *args, **kwargs) -> None:
-        """Called on specific events"""
         instance = self.ctx.config.get_instance_by_name(source_instance)
 
         if not instance:

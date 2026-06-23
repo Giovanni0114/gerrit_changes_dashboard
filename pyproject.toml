@@ -3,6 +3,7 @@ name = "gerrit-approvals-dashboard"
 version = "0.1.0"
 dependencies = [
     "rich",
+    "requests",
 ]
 readme = "README.md"
 license = "MIT"

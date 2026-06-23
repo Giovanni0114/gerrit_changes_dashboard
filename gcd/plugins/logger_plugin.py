@@ -3,10 +3,7 @@ from gcd.core.models import BasePlugin
 
 class LoggerPlugin(BasePlugin):
     name = "logger"
-    version = "0.1.2"
-
-    def setup(self) -> None:
-        self.log.info("setup")
+    version = "0.0.1"
 
     def on_init(self):
         self.log.info("on_init")

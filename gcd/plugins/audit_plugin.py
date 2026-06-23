@@ -5,9 +5,6 @@ class AuditPlugin(BasePlugin):
     name = "audit"
     version = "0.0.1"
 
-    def setup(self) -> None:
-        self.log.info("setup")
-
     def on_init(self):
         self.log.info("on_init")
 

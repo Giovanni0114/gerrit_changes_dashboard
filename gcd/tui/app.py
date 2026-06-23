@@ -130,8 +130,7 @@ class App:
             len(self.plugin_manager.plugins_per_instance),
         )
 
-        self.plugin_manager.setup()
-        _log.info(f"app plugins after setup: {self.plugin_manager.plugins_per_instance}")
+        _log.info(f"app plugins: {self.plugin_manager.plugins_per_instance}")
 
     def _sync_cache_with_changes(self) -> None:
         """Evict orphaned cache entries and hydrate tracked changes from cache."""

@@ -3,6 +3,7 @@ import tomllib
 from enum import Enum
 from pathlib import Path
 
+from gcd.core.logs import app_logger
 from gcd.core.models import GerritInstance
 
 from .field import Field
@@ -49,6 +50,8 @@ _FIELDS: list[Field] = [
     Field("_editor", "editor", _str_parser(None), example='"vim"'),
 ]
 
+_logger = app_logger()
+
 
 class AppConfig:
     path: Path
@@ -65,10 +68,14 @@ class AppConfig:
     layout: Layout = Layout.DEFAULT
     instances: list[GerritInstance]
     _editor: str | None = None
+    plugin_configs: dict[str, dict]
+    plugin_configs_per_instance: dict[str, dict[str, dict]]
 
     def __init__(self, path: Path) -> None:
         self.path = path
         self.instances = []
+        self.plugin_configs = {}
+        self.plugin_configs_per_instance = {}
         self.load_config()
 
     def is_file_changed(self) -> bool:
@@ -93,6 +100,7 @@ class AppConfig:
             setattr(self, field.attr, field.read(config_data, base_dir))
 
         self._parse_instances(data, config_data)
+        self._parse_plugin_configs(data)
         self._file_mtime = self._mtime()
 
     def _parse_instances(self, data: dict, config_data: dict) -> None:
@@ -118,6 +126,25 @@ class AppConfig:
         names = [ins.name for ins in self.instances]
         if len(set(names)) != len(names):
             raise ValueError("Instance names must be unique.")
+
+    def _parse_plugin_configs(self, data: dict) -> None:
+        for name, conf in data.get("plugin", {}).items():
+            self.plugin_configs[name] = {}
+            self.plugin_configs_per_instance[name] = {}
+
+            for key, value in conf.items():
+                if isinstance(value, dict):
+                    self.plugin_configs_per_instance[name][key] = value
+                else:
+                    self.plugin_configs[name][key] = value
+
+    def get_config_for_plugin(self, plugin_name: str, instance: str) -> dict:
+        plugin_config = self.plugin_configs.get(plugin_name, {}).copy()
+        instance_config = self.plugin_configs_per_instance.get(plugin_name, {}).get(instance, {})
+
+        plugin_config.update(instance_config)
+
+        return plugin_config
 
     @property
     def default_instance(self) -> GerritInstance:

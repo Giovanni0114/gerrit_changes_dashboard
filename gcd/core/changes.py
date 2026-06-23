@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from gcd.core.logs import app_logger
-from gcd.core.models import TrackedChange
+from gcd.core.models import ChangeIdentifier, TrackedChange
 
 _logger = app_logger()
 
@@ -53,6 +53,13 @@ class Changes:
             return None
 
         ch_id = self._index_map[idx]
+        for ch in self._changes:
+            if ch.id == ch_id:
+                return ch
+
+        return None
+
+    def by_id(self, ch_id: ChangeIdentifier) -> TrackedChange | None:
         for ch in self._changes:
             if ch.id == ch_id:
                 return ch
