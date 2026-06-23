@@ -364,6 +364,10 @@ class App:
         else:
             self.status_msg = f"[red]URL not found for change {ch.number}[/red]"
 
+    def activate(self, rows: Index) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            self.plugin_manager.emit("activate", ch.instance, ch.id, ch)
+
     # --- Editor methods ---
 
     def open_config_in_editor(self) -> None:

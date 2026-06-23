@@ -1,4 +1,4 @@
-from gcd.core.models import BasePlugin
+from gcd.core.models import BasePlugin, ChangeIdentifier, TrackedChange
 
 
 class LoggerPlugin(BasePlugin):
@@ -11,8 +11,8 @@ class LoggerPlugin(BasePlugin):
     def on_exit(self) -> None:
         self.log.info("on_exit")
 
-    def on_activate(self) -> None:
-        self.log.info("on_activate")
+    def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
+        self.log.info(f"on_activate {change_id}")
 
 
 plugin_class = LoggerPlugin

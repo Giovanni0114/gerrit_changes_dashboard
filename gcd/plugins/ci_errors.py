@@ -1,6 +1,6 @@
 import requests
 
-from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier
+from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier, TrackedChange
 
 REQUIRED_CONFIG_KEYS = ["url", "api_key"]
 TRIGGERING_APPROVAL_LABEL = "Verified"
@@ -74,8 +74,8 @@ class CiErrorsPlugin(BasePlugin):
     def on_exit(self) -> None:
         self.log.info("on_exit")
 
-    def on_activate(self) -> None:
-        self.log.info("on_activate")
+    def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
+        self.log.info(f"on_activate {change_id}")
 
     def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
         if new_approval.label == TRIGGERING_APPROVAL_LABEL:

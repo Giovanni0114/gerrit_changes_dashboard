@@ -1,4 +1,4 @@
-from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier
+from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier, TrackedChange
 
 
 class AuditPlugin(BasePlugin):
@@ -11,8 +11,8 @@ class AuditPlugin(BasePlugin):
     def on_exit(self) -> None:
         self.log.info("on_exit")
 
-    def on_activate(self) -> None:
-        self.log.info("on_activate")
+    def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
+        self.log.info(f"on_activate {change_id}")
 
     def on_new_change(self, change_id: ChangeIdentifier) -> None:
         self.log.info(f"on_new_change {change_id}")

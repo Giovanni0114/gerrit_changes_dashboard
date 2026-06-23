@@ -5,6 +5,7 @@ from gcd.core.models import AppContext, Context, Index
 from gcd.core.utils import Arrow
 
 from .context_actions import (
+    activate,
     add_change,
     comment_add,
     comment_delete,
@@ -106,6 +107,7 @@ LEADER_ACTIONS: dict[str, LeafAction] = {
     "d": LeafAction(toggle_disable, [input_idx_factory()], "Toggle disabled"),
     "x": LeafAction(handle_deletion, [input_idx_factory({"x", "a", "s"})], "Toggle deletion"),
     "o": LeafAction(open_change, [input_idx_factory()], "Open change"),
+    "a": LeafAction(activate, [input_idx_factory()], "Activate"),
     "c": LeafAction(None, [], "Comment"),  # submenu
     "r": LeafAction(None, [], "Review"),  # submenu
 }
