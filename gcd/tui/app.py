@@ -444,7 +444,7 @@ class App:
 
                 for tag in sorted(tags):
                     changes = tags[tag]
-                    if not changes or tag in self.config.hide_tags:
+                    if not changes or any(t in self.config.hide_tags for t in tag.split()):
                         continue
 
                     tables.append(
