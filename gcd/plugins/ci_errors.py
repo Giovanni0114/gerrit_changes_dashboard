@@ -71,11 +71,31 @@ class CiErrorsPlugin(BasePlugin):
                 f" {', '.join(REQUIRED_CONFIG_KEYS)}"
             )
 
+    def _check_ci_errors(self, ch: TrackedChange) -> None:
+        if not ch.current_patchset_number:
+            self.log.error(f"_check_ci_errors: cannot determine current patchset number for {ch.id}")
+            return
+
+        statuses = self._ask_for_errors(ch.number, ch.current_patchset_number)
+
+        if statuses is None:
+            self.log.error(f"_check_ci_errors: failed to retrieve CI errors for {ch.id}")
+            return
+
+        msg = f"VERIFICATION: COMPLETED: {statuses['completed']}, RUNNING: {statuses['running']}, UNKNOWN: {statuses['unknown']}"
+        self.log.info(f"_check_ci_errors: {msg}")
+        self.log.info(f"_check_ci_errors: errors: {len(statuses["comments"])}")
+
+        ch.comments.append(msg)
+        ch.comments.extend(statuses["comments"])
+        ch.modified = True
+
     def on_exit(self) -> None:
         self.log.info("on_exit")
 
-    def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
-        self.log.info(f"on_activate {change_id}")
+    def on_activate(self, change_id: ChangeIdentifier, ch: TrackedChange) -> None:
+        self.log.info(f"on_activate: {change_id}")
+        self._check_ci_errors(ch)
 
     def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
         if new_approval.label == TRIGGERING_APPROVAL_LABEL:
@@ -85,21 +105,7 @@ class CiErrorsPlugin(BasePlugin):
                 self.log.error(f"on_new_approval: cannot retrieve change by id {change_id}")
                 return
 
-            if not ch.current_patchset_number:
-                self.log.error(f"on_new_approval: cannot determine current patchset number for {change_id}")
-                return
-
-            statuses = self._ask_for_errors(change_id.number, ch.current_patchset_number)
-
-            if statuses is None:
-                self.log.error(f"on_new_approval: failed to retrieve CI errors for {change_id}")
-                return
-
-            ch.comments.append(
-                f"VERIFICATION: COMPLETED: {statuses['completed']}, RUNNING: {statuses['running']}, UNKNOWN: {statuses['unknown']}"
-            )
-            ch.comments.extend(statuses["comments"])
-            ch.modified = True
+                self._check_ci_errors(ch)
 
 
 plugin_class = CiErrorsPlugin
