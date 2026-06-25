@@ -11,7 +11,7 @@ class CiErrorsPlugin(BasePlugin):
     name = "ci_errors"
     version = "0.0.1"
 
-    def _ask_for_errors(self, change_nr: str, patchset_nr: int) -> dict[str, int] | None:
+    def _ask_for_errors(self, change_nr: str, patchset_nr: int) -> dict[str, int | list] | None:
         url = self.config.get("url")
         api_key = self.config.get("api_key")
 
@@ -35,15 +35,27 @@ class CiErrorsPlugin(BasePlugin):
             self.log.error(f"_ask_for_errors: failed to parse response for change {change_nr}: {e}")
             return None
 
-        statuses: dict[str, int] = {}
+        statuses = {"running": 0, "completed": 0, "unknown": 0, "comments": []}
 
         for en in response:
-            status = en.get(STATUS_FIELD, "<undefined>")
+            match en.get(STATUS_FIELD, "unknown"):
+                case "COMPLETED":
+                    statuses["completed"] += 1
 
-            if status in statuses:
-                statuses[status] += 1
-            else:
-                statuses[status] = 1
+                    for cat in en.get("categories", []):
+                        if cat.get("category") == "error":
+                            err_msg = cat.get("category", "<?>")
+                            err_type = cat.get("err_type", "<?>")
+                            job_link = cat.get("job_link", "<?>")
+
+                            statuses["comments"].append(f"({err_type}) {err_msg} - {job_link}")
+
+                case "RUNNING":
+                    statuses["running"] += 1
+
+                case _:
+                    statuses["unknown"] += 1
+                    self.log(f"_ask_for_errors: ERROR: unknown status for entry: {en}")
 
         return statuses
 
@@ -83,7 +95,10 @@ class CiErrorsPlugin(BasePlugin):
                 self.log.error(f"on_new_approval: failed to retrieve CI errors for {change_id}")
                 return
 
-            ch.comments.append(f"VERIFICATION JOB STATUS: {statuses}")
+            ch.comments.append(
+                f"VERIFICATION: COMPLETED: {statuses['completed']}, RUNNING: {statuses['running']}, UNKNOWN: {statuses['unknown']}"
+            )
+            ch.comments.extend(statuses["comments"])
             ch.modified = True
 
 

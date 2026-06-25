@@ -134,7 +134,11 @@ def comment_edit_last(app_ctx: AppContext, ctx: Context) -> None:
 
 
 def comment_delete(app_ctx: AppContext, ctx: Context) -> None:
-    """Delete a comment or all comments."""
+    """Delete a comment, all comments, or all tags"""
+    if ctx["idx"] == "t":
+        app_ctx.delete_comment_all_tags(idx)
+        return
+
     if (idx := parse_idx_notation(ctx["idx"])) is None:
         app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
         return

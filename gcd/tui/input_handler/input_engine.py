@@ -62,7 +62,7 @@ def input_idx_factory(add_special_chars: set[str] | None = None) -> InputField:
 
 
 TEXT_FIELD = InputField("text")
-COMMENT_IDX_FIELD = InputField("comment_idx", frozenset({"a"}), digits_only=True)
+COMMENT_IDX_FIELD = InputField("comment_idx", frozenset({"a", "t"}))
 CONFIRM_FIELD = InputField("confirm", frozenset({"y", "n"}))
 SCORE_FIELD = InputField(
     "score", digits_only=True, extra_chars=frozenset({"+", "-"}), special_hint_func=code_review_hint

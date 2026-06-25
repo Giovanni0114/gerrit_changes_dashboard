@@ -703,7 +703,7 @@ class App:
 
     def _delete_comment(self, ch: TrackedChange, comment_idx: Index) -> None:
         if comment_idx.wildcard:
-            ch.comments = []
+            ch.comments = [com for com in ch.comments if com.startswith("#")]
             return
 
         new = list(ch.comments)
@@ -711,6 +711,13 @@ class App:
             if 0 <= idx < len(new):
                 new.pop(idx)
         ch.comments = new
+
+    def delete_comment_all_tags(self, rows: Index) -> None:
+        for ch in self._resolve_index_for_all(rows):
+            self._delete_comment_all_tags(ch)
+
+    def _delete_comment_all_tags(self, ch: TrackedChange, comment_idx: Index) -> None:
+        ch.comments = [com for com in ch.comments if not com.startswith("#")]
 
     def open_comment_link(self, rows: Index, comment_idx: Index) -> None:
         for ch in self._resolve_index_for_all(rows):
