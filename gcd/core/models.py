@@ -100,8 +100,9 @@ class TrackedChange:
         def _is_tag(comment: str) -> bool:
             return comment.startswith("#") and " " not in comment
 
-        if self.comments:
-            return " ".join([comment for comment in self.comments if _is_tag(comment)])
+        tags = [comment for comment in self.comments if _is_tag(comment)]
+        if tags:
+            return " ".join(tags)
 
         return None
 
