@@ -185,6 +185,10 @@ class AppContext(Protocol):
     def delete_comment_all_tags(self, row: Index) -> None: ...
     def open_comment_link(self, rows: Index, comment_idx: Index) -> None: ...
 
+    # --- Additional change info ---
+
+    def fetch_comments_from_change(self, ch: TrackedChange) -> list[str]: ...
+
 
 class BasePlugin(ABC):
     name: str = "base"

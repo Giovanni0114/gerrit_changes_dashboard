@@ -82,9 +82,12 @@ class CiErrorsPlugin(BasePlugin):
             self.log.error(f"_check_ci_errors: failed to retrieve CI errors for {ch.id}")
             return
 
-        msg = f"VERIFICATION: COMPLETED: {statuses['completed']}, RUNNING: {statuses['running']}, UNKNOWN: {statuses['unknown']}"
+        msg = f"VERIFICATION: COMPLETED: {statuses['completed']}, "
+        msg += f"RUNNING: {statuses['running']}, "
+        msg += f"UNKNOWN: {statuses['unknown']}"
+
         self.log.info(f"_check_ci_errors: {msg}")
-        self.log.info(f"_check_ci_errors: errors: {len(statuses["comments"])}")
+        self.log.info(f"_check_ci_errors: errors: {len(statuses['comments'])}")
 
         ch.comments.append(msg)
         ch.comments.extend(statuses["comments"])

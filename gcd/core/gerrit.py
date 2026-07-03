@@ -107,5 +107,18 @@ class GerritCommunication:
 
         return {"error": "Change not found"}
 
+    def query_change_comments(self, instance: GerritInstance, change_id: str) -> list[dict]:
+        changes = self._query(instance, change_id, "--comments")
+
+        if not changes:
+            return {"error": "Change not found"}
+
+        change = next(iter(changes))
+
+        if "comments" not in change:
+            return {"error": "Could not get comments"}
+
+        return change["comments"]
+
     def query_open_changes(self, instance: GerritInstance) -> list[dict]:
         return self._query(instance, f"owner:{instance.email}", "is:open")

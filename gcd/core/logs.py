@@ -1,4 +1,5 @@
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -10,6 +11,20 @@ _MAX_BYTES = 5 * 1024 * 1024
 _BACKUPS = 5
 _FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 _DATEFMT = "%Y-%m-%dT%H:%M:%S"
+_DEFAULT_LEVEL = logging.INFO
+
+
+def _log_level_from_env() -> int:
+    raw_level = os.getenv("LOG_LEVEL")
+    if raw_level is None:
+        return _DEFAULT_LEVEL
+
+    normalized = raw_level.strip().upper()
+    if not normalized:
+        return _DEFAULT_LEVEL
+
+    level = logging.getLevelNamesMapping().get(normalized)
+    return level if isinstance(level, int) else _DEFAULT_LEVEL
 
 
 def _build(name: str, log_dir: Path, filename: str) -> logging.Logger:
@@ -18,7 +33,8 @@ def _build(name: str, log_dir: Path, filename: str) -> logging.Logger:
         logger.removeHandler(h)
         h.close()
 
-    logger.setLevel(logging.INFO)
+    level = _log_level_from_env()
+    logger.setLevel(level)
     logger.propagate = False
 
     handler = RotatingFileHandler(

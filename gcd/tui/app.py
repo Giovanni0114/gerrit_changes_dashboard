@@ -352,6 +352,18 @@ class App:
             _log.info("rebase triggered change=%s instance=%s", ch.number, ch.instance)
             self._start_refresh()
 
+    # --- gerrit fetch additional info ---
+
+    def fetch_comments_from_change(self, ch: TrackedChange) -> list[dict]:
+        instance = self.config.get_instance_by_name(ch.instance)
+        if instance is None:
+            self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
+            return
+
+        return self.gerrit_comm.query_change_comments(instance, str(ch.number))
+
+    # def _review_rebase(self, ch: TrackedChange) -> None:
+
     # --- Open WebUI ---
 
     def open_change_webui(self, rows: Index) -> None:
