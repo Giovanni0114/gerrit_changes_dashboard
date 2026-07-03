@@ -7,8 +7,8 @@ So, it's usable
   - [x] EPIC001 done - review operations
 
 ### alpha-2
-  - [ ] EPIC004 done - plugins system
-  - [ ] EPIC003 done - analyzer for comments as plugin
+  - [x] EPIC004 done - plugins system
+  - [x] EPIC003 done - analyzer for comments as plugin
 
 ### nice-to-have
   - [ ] 010: spinner
