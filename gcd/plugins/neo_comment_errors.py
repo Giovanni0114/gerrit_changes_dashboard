@@ -1,90 +1,108 @@
 from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier, TrackedChange
 
+KEY_START_GATE = "start_gate_message"
+KEY_START_CHECK = "start_check_message"
+KEY_FINISH_MESSAGES = "finish_messages"
+KEY_BUILDSET_LINK_PREFIX = "buildset_link_prefix"
+KEY_JOB_LINE_PREFIX = "job_line_prefix"
+KEY_SUCCESS_LABELS = "success_labels"
+KEY_FAILURE_LABELS = "failure_labels"
+
 REQUIRED_CONFIG_KEYS = [
-    # "parser",
-    # "line-regex",
+    KEY_START_GATE,
+    KEY_START_CHECK,
+    KEY_FINISH_MESSAGES,
+    KEY_BUILDSET_LINK_PREFIX,
+    KEY_JOB_LINE_PREFIX,
+    KEY_SUCCESS_LABELS,
+    KEY_FAILURE_LABELS,
 ]
-
-
-START_GATE_MESSAGE = "Starting gate jobs: "
-START_GATE_MESSAGE = "Starting check jobs: "
-SUCCESS_GATE_MESSAGE = "Build succeeded (check pipeline)."
-FAIL_GATE_MESSAGE = "Build failed (check pipeline)."
-
-SUCCESS_LABELS = ["SUCCESS"]
-FAILUE_LABELS = ["FAILURE"]
 
 
 class CommentCatcher(BasePlugin):
     name = "comment_catcher"
-    version = "0.0.1"
+    version = "0.0.2"
 
-    def on_init(self):
-        if all(key in self.config for key in REQUIRED_CONFIG_KEYS):
-            self.log.info("on_init: plugin initialized")
-        else:
+    def on_init(self) -> None:
+        missing = [key for key in REQUIRED_CONFIG_KEYS if key not in self.config]
+        if missing:
             self.enabled = False
-            self.log.error(
-                "on_init: init failed, one or more of required fields are not configured:"
-                f" {', '.join(REQUIRED_CONFIG_KEYS)}"
-            )
+            self.log.error(f"on_init: init failed, missing required config keys: {', '.join(missing)}")
+            return
+
+        self.start_gate_message: str = self.config[KEY_START_GATE]
+        self.start_check_message: str = self.config[KEY_START_CHECK]
+        self.finish_messages: list[str] = list(self.config[KEY_FINISH_MESSAGES])
+        self.buildset_link_prefix: str = self.config[KEY_BUILDSET_LINK_PREFIX]
+        self.job_line_prefix: str = self.config[KEY_JOB_LINE_PREFIX]
+        self.success_labels: list[str] = list(self.config[KEY_SUCCESS_LABELS])
+        self.failure_labels: list[str] = list(self.config[KEY_FAILURE_LABELS])
+
+        self.log.info("on_init: plugin initialized")
 
     def on_exit(self) -> None:
         pass
 
     def on_activate(self, change_id: ChangeIdentifier, ch: TrackedChange) -> None:
         self.log.info(f"on_activate: {change_id}")
-        comments = self.ctx.fetch_comments_from_change(ch)[::-1]
 
-        for comment in comments:
-            msg = comment["message"]
+        comments = self.ctx.fetch_comments_from_change(ch)
+        if not isinstance(comments, list):
+            self.log.error(f"on_activate: could not fetch comments for {change_id}: {comments}")
+            return
+
+        # Walk newest -> oldest and act on the first CI comment we recognise.
+        for comment in reversed(comments):
+            msg = comment.get("message", "") if isinstance(comment, dict) else ""
+            if not msg:
+                continue
 
             self.log.debug(msg)
 
-            if START_GATE_MESSAGE in msg:
-                link = msg.split(START_GATE_MESSAGE)[-1]
-                self.log.info(f"Gate started at {link}")
-
-                ch.comments.append(f"Gate started at {link}")
-                ch.modified = True
+            if self._handle_ci_comment(ch, msg):
                 return
 
-            if START_CHECK_MESSAGE in msg:
-                link = msg.split(START_CHECK_MESSAGE)[-1]
-                self.log.info(f"Check started at {link}")
+    def _handle_ci_comment(self, ch: TrackedChange, msg: str) -> bool:
+        if self.start_gate_message in msg:
+            return self._record_pipeline_start(ch, msg, self.start_gate_message, "Gate")
 
-                ch.comments.append(f"Check started at {link}")
-                ch.modified = True
-                return
+        if self.start_check_message in msg:
+            return self._record_pipeline_start(ch, msg, self.start_check_message, "Check")
 
-            if SUCCESS_GATE_MESSAGE in msg or FAIL_GATE_MESSAGE in msg:
-                buildset_link_regex = "https://zuul.volvocars.net/t/vcc/buildset/"
-                lines = msg.splitlines()
-                link = [l for l in lines if buildset_link_regex in l]  # noqa: E741
+        if any(marker in msg for marker in self.finish_messages):
+            return self._record_gate_finish(ch, msg)
 
-                if not link:
-                    self.log.info(f"Link not found in succeeded gate message {msg}")
-                    return
+        return False
 
-                link = link[0]
-                self.log.info(f"Gate finished at {link}")
+    def _record_pipeline_start(self, ch: TrackedChange, msg: str, marker: str, label: str) -> bool:
+        link = msg.split(marker)[-1].strip()
+        self.log.info(f"{label} started at {link}")
 
-                jobs = [l for l in lines if l.startswith("- ")]  # noqa: E741
+        ch.comments.append(f"{label} started at {link}")
+        ch.modified = True
+        return True
 
-                succsess = [l for l in jobs if any(label in l for label in SUCCESS_LABELS)]
-                failures = [l for l in jobs if any(label in l for label in FAILUE_LABELS)]
+    def _record_gate_finish(self, ch: TrackedChange, msg: str) -> bool:
+        lines = msg.splitlines()
 
-                comment_msg = f"{len(jobs)} found, {len(succsess)} succeeded, {len(failures)} failed"
+        links = [line for line in lines if self.buildset_link_prefix in line]
+        if not links:
+            self.log.info(f"Buildset link not found in gate message: {msg}")
+            return False
 
-                self.log.info(comment_msg)
+        link = links[0].strip()
+        jobs = [line for line in lines if line.startswith(self.job_line_prefix)]
+        succeeded = [job for job in jobs if any(label in job for label in self.success_labels)]
+        failed = [job for job in jobs if any(label in job for label in self.failure_labels)]
 
-                ch.comments.append(f"Gate finished at {link}: {comment_msg}")
+        summary = f"{len(jobs)} found, {len(succeeded)} succeeded, {len(failed)} failed"
+        self.log.info(f"Gate finished at {link}: {summary}")
 
-                if failures:
-                    ch.comments.extend(failures)
-
-                ch.modified = True
-                return
+        ch.comments.append(f"Gate finished at {link}: {summary}")
+        if failed:
+            ch.comments.extend(failed)
+        ch.modified = True
+        return True
 
     def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
         pass
