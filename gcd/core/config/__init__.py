@@ -99,6 +99,10 @@ class AppConfig:
         for field in _FIELDS:
             setattr(self, field.attr, field.read(config_data, base_dir))
 
+        self.instances = []
+        self.plugin_configs = {}
+        self.plugin_configs_per_instance = {}
+
         self._parse_instances(data, config_data)
         self._parse_plugin_configs(data)
         self._file_mtime = self._mtime()
