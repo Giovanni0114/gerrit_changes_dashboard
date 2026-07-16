@@ -101,6 +101,22 @@ Spec and plan in `spec/features/023-action-layer/`.
 
 ---
 
+## 024 | High-level behavioural test suite
+
+The codebase has zero committed tests. Add a small, high-value suite that tests
+**WHAT** the app does (state changes, persistence, dispatched actions, parsed
+models), not **HOW** it renders — `display.py` is deliberately excluded. YAGNI:
+~30–35 focused tests across 5 files, stdlib `unittest.mock` only, SSH mocked at
+the `App.gerrit_comm` seam, files under `tmp_path`.
+
+Files: `tests/conftest.py` (fixtures: temp config, `App`, `FakeGerrit`,
+`SpyAppContext`), `test_changes_persistence.py`, `test_app_behaviors.py`,
+`test_input_handler.py`, `test_selection_and_config.py`.
+
+Spec and test cases in `spec/features/024-test-suite/`.
+
+---
+
 # Dev Stories
 
 ---
