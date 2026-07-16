@@ -270,14 +270,14 @@ class InputHandler:
                 self.reset()
                 return None
 
-            change = self.app_context.changes.at(next(iter(idx.values)) - 1)
+            last = self.app_context.last_comment(idx)
 
-            if not change or not change.comments:
+            if last is None:
                 self.app_context.status_msg = "[red]No comments to edit[/red]"
                 self.reset()
                 return None
 
-            return change.comments[-1]
+            return last
         return ""
 
     def reset(self) -> None:

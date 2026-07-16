@@ -740,6 +740,13 @@ class App:
     def _delete_comment_all_tags(self, ch: TrackedChange, comment_idx: Index) -> None:
         ch.comments = [com for com in ch.comments if not com.startswith("#")]
 
+    def last_comment(self, row: Index) -> str | None:
+        """Return the last comment of the single change addressed by ``row``, or None."""
+        changes = row.resolve(self.changes)
+        if not changes or not changes[0].comments:
+            return None
+        return changes[0].comments[-1]
+
     def open_comment_link(self, rows: Index, comment_idx: Index) -> None:
         for ch in self._resolve_index_for_all(rows):
             comments = ch.comments

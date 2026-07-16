@@ -189,6 +189,8 @@ class AppContext(Protocol):
 
     def fetch_comments_from_change(self, ch: TrackedChange) -> list[str]: ...
 
+    def last_comment(self, row: Index) -> str | None: ...
+
 
 class BasePlugin(ABC):
     name: str = "base"
