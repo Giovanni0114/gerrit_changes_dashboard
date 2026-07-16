@@ -122,3 +122,6 @@ class GerritCommunication:
 
     def query_open_changes(self, instance: GerritInstance) -> list[dict]:
         return self._query(instance, f"owner:{instance.email}", "is:open")
+
+    def query_operators(self, instance: GerritInstance, operators: list[str]) -> list[dict]:
+        return self._query(instance, *operators)
