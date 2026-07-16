@@ -890,31 +890,45 @@ def main() -> None:
     import argparse
     import sys
 
+    from gcd.cli.query import run as query_run
     from gcd.core.config import generate_example_config
     from gcd.core.logs import setup_logging
 
-    parser = argparse.ArgumentParser(
-        description="Gerrit Changes Dashboard",
-    )
-
+    parser = argparse.ArgumentParser(description="Gerrit Changes Dashboard")
     parser.add_argument(
-        "config",
-        nargs="?",
+        "-c",
+        "--config",
         default="config.toml",
         help="Path to TOML config file (default: config.toml)",
     )
-
     parser.add_argument(
         "--init",
         action="store_true",
         help="Generate example config.toml, then exit",
     )
-
     parser.add_argument(
         "--clear-cache",
         action="store_true",
         help="Delete the SSH data cache file before starting",
     )
+
+    subparsers = parser.add_subparsers(dest="command")
+    query_parser = subparsers.add_parser("query", help="Run a Gerrit search and exit")
+
+    instance_group = query_parser.add_mutually_exclusive_group()
+    instance_group.add_argument("--instance", help="Query a single configured instance by name")
+    instance_group.add_argument("--all-instances", action="store_true", help="Query every configured instance")
+
+    owner_group = query_parser.add_mutually_exclusive_group()
+    owner_group.add_argument("--mine", action="store_true", help="Filter by the instance's own email")
+    owner_group.add_argument("--owner", help="Filter by owner email")
+
+    query_parser.add_argument("--open", action="store_true", help="is:open")
+    query_parser.add_argument("--submittable", action="store_true", help="is:submittable")
+    query_parser.add_argument("--project", help="project:PATH")
+    query_parser.add_argument("--mergedafter", help="mergedafter:DATE (input DD-MM-YYYY)")
+    query_parser.add_argument("--limit", type=int, help="limit:N")
+    query_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a table")
 
     args = parser.parse_args()
     config_path = Path(args.config)
@@ -932,6 +946,9 @@ def main() -> None:
     config = AppConfig(config_path)
     setup_logging(config.log_path)
     _log.info("startup config=%s logs=%s", config_path, config.log_path)
+
+    if args.command == "query":
+        sys.exit(query_run(config, args))
 
     if args.clear_cache:
         config.cache_path.unlink(missing_ok=True)
