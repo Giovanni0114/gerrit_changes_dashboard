@@ -14,6 +14,7 @@ from .context_actions import (
     fetch_my_changes,
     handle_deletion,
     open_change,
+    open_change_new_window,
     open_changes_in_editor,
     open_comment_link,
     open_config_in_editor,
@@ -107,6 +108,7 @@ LEADER_ACTIONS: dict[str, LeafAction] = {
     "d": LeafAction(toggle_disable, [input_idx_factory()], "Toggle disabled"),
     "x": LeafAction(handle_deletion, [input_idx_factory({"x", "a", "s"})], "Toggle deletion"),
     "o": LeafAction(open_change, [input_idx_factory()], "Open change"),
+    "O": LeafAction(open_change_new_window, [input_idx_factory()], "Open change (new window)"),
     "a": LeafAction(activate, [input_idx_factory()], "Activate"),
     "c": LeafAction(None, [], "Comment"),  # submenu
     "r": LeafAction(None, [], "Review"),  # submenu

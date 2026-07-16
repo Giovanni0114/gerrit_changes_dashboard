@@ -366,13 +366,18 @@ class App:
 
     # --- Open WebUI ---
 
-    def open_change_webui(self, rows: Index) -> None:
-        for ch in self._resolve_index(rows):
+    def open_change_webui(self, rows: Index, new_window: bool = False) -> None:
+        changes = self._resolve_index(rows)
+        if new_window:
+            self._open_change_webui(changes[0], True)
+            changes = changes[1:]
+
+        for ch in changes:
             self._open_change_webui(ch)
 
-    def _open_change_webui(self, ch: TrackedChange) -> None:
+    def _open_change_webui(self, ch: TrackedChange, new_window: bool = False) -> None:
         if ch.url:
-            webbrowser.open(ch.url)
+            webbrowser.open(ch.url, 1 if new_window else 0)
         else:
             self.status_msg = f"[red]URL not found for change {ch.number}[/red]"
 

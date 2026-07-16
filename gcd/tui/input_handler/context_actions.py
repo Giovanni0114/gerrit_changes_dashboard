@@ -82,6 +82,13 @@ def open_change(app_ctx: AppContext, ctx: Context) -> None:
 
     app_ctx.open_change_webui(idx)
 
+def open_change_new_window(app_ctx: AppContext, ctx: Context) -> None:
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.open_change_webui(idx, True)
+
 
 def activate(app_ctx: AppContext, ctx: Context) -> None:
     """Invoke the on_activate plugin handler for the targeted change(s)."""
