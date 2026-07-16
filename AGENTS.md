@@ -52,11 +52,6 @@ uv run gcd                                 # via entry point
 uv run gcd --init                          # generate example config
 ```
 
-> [!IMPORTANT]
-> Too early for committed tests — the app changes too rapidly for them to catch
-> anything meaningful yet. Temporary tests for development control are fine,
-> but don't commit them.
-
 ## Code Conventions
 
 Ruff enforces formatting and most style rules — run it and trust it. Beyond that:
