@@ -737,7 +737,7 @@ class App:
         for ch in self._resolve_index_for_all(rows):
             self._delete_comment_all_tags(ch)
 
-    def _delete_comment_all_tags(self, ch: TrackedChange, comment_idx: Index) -> None:
+    def _delete_comment_all_tags(self, ch: TrackedChange) -> None:
         ch.comments = [com for com in ch.comments if not com.startswith("#")]
 
     def last_comment(self, row: Index) -> str | None:

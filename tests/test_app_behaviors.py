@@ -72,6 +72,14 @@ def test_delete_comment_removes_addressed(app):
     assert ch.comments == ["a", "c"]
 
 
+def test_delete_comment_all_tags_removes_tags(app):
+    ch = add(app, 1, comments=["note", "#tag", "follow-up", "#urgent"])
+
+    app.delete_comment_all_tags(idx(1))
+
+    assert ch.comments == ["note", "follow-up"]
+
+
 # --- delete / restore lifecycle ---
 
 
