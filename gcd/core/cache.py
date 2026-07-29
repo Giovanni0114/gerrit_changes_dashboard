@@ -142,4 +142,3 @@ class SshCache:
         ch.abandoned = entry.abandoned
         ch.is_wip = entry.is_wip
         ch.approvals = list(entry.approvals)
-        ch._snapshot = frozenset((a.label, a.value, a.by) for a in entry.approvals)

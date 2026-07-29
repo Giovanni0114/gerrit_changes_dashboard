@@ -79,7 +79,6 @@ class TrackedChange:
     current_revision: str | None = None
     current_patchset_number: int | None = None
     error: str | None = None
-    _snapshot: frozenset[tuple[str, str, str]] = field(default_factory=frozenset, repr=True, compare=True)
 
     modified: bool = field(default=False, init=False)
 

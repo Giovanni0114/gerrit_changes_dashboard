@@ -72,26 +72,21 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache, plugin_
     patch_set = data.get("currentPatchSet", {})
     ch.current_revision = patch_set.get("revision")
     ch.current_patchset_number = patch_set.get("number")
-    new_approvals = [
+
+    old_approvals = ch.approvals.copy()
+
+    ch.approvals = [
         ApprovalEntry(a.get("type", "?"), a.get("value", ""), a.get("by", {}).get("name", ""))
         for a in patch_set.get("approvals", [])
     ]
 
-    old_snapshot = ch._snapshot
-    new_snapshot = frozenset((a.label, a.value, a.by) for a in new_approvals)
-    ch.approvals = new_approvals
+    for approval in ch.approvals:
+        if approval not in old_approvals:
+            plugin_manager.emit("new_approval", ch.instance, ch.id, approval)
 
-    # Only emit once we have a baseline — otherwise every approval looks "new" on first hydration.
-    if old_snapshot:
-        for approval in new_approvals:
-            if (approval.label, approval.value, approval.by) not in old_snapshot:
-                plugin_manager.emit("new_approval", ch.instance, ch.id, approval)
-
-    if ch.waiting and old_snapshot and new_snapshot != old_snapshot:
+    if ch.waiting and ch.approvals != old_approvals:
         ch.waiting = False
         plugin_manager.emit("status_changed", ch.instance, ch.id, ("waiting", False))
-
-    ch._snapshot = new_snapshot
 
     was_submitted = ch.submitted
     ch.submitted = any(a.is_submitted() for a in ch.approvals)

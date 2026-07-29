@@ -188,6 +188,21 @@ def test_store_result_maps_query_dict(app):
     assert ch.approvals[0].by == "Alice"
 
 
+def test_store_result_clears_waiting_when_first_approval_arrives(app):
+    ch = add(app, 123, waiting=True)
+    app.plugin_manager.emit = MagicMock()
+    no_approvals = {"currentPatchSet": {"approvals": []}}
+    first_approval = {
+        "currentPatchSet": {"approvals": [{"type": "Code-Review", "value": "2", "by": {"name": "Alice"}}]}
+    }
+
+    _store_result(ch, no_approvals, app.cache, app.plugin_manager)
+    _store_result(ch, first_approval, app.cache, app.plugin_manager)
+
+    assert ch.waiting is False
+    app.plugin_manager.emit.assert_any_call("status_changed", ch.instance, ch.id, ("waiting", False))
+
+
 def test_store_result_derives_status_flags(app):
     # TC-115
     abandoned = add(app, 1)
