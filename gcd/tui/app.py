@@ -656,7 +656,7 @@ class App:
             ch = TrackedChange(number=number, instance=instance.name)
             _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
-            self.plugin_manager.emit("new_change", ch.instance, ch.id, ch)
+            self.plugin_manager.emit("new_change", ch.instance, ch.id)
             numbers_in_changes.add(number)
             added += 1
 
