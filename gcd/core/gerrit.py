@@ -102,7 +102,7 @@ class GerritCommunication:
         return self._review(instance, "code-review", revision, str(score))
 
     def query_change(self, instance: GerritInstance, change_id: str) -> dict:
-        if changes := self._query(instance, change_id):
+        if changes := self._query(instance, f"change:{change_id}"):
             return next(iter(changes))
 
         return {"error": "Change not found"}
