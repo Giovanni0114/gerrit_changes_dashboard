@@ -100,6 +100,10 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache, plugin_
 
 
 class App:
+    # Config/changes files are polled at most this often, independently of the
+    # UI render tick, to keep idle CPU low (see reload_config).
+    CONFIG_POLL_INTERVAL_SEC: float = 5.0
+
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self.changes = Changes(self.config.changes_path)
@@ -116,6 +120,7 @@ class App:
         self.refresh_done.set()
         self.refresh_pending: bool = False
         self.seconds_since_refresh: float = 0.0
+        self.seconds_since_config_poll: float = 0.0
         self.pending_editor: EditorTarget | None = None
         self._pause_keys = Event()
 
@@ -785,6 +790,20 @@ class App:
 
     # --- Config methods ---
 
+    def _poll_config_if_due(self, elapsed: float) -> bool:
+        """Reload config at most once per CONFIG_POLL_INTERVAL_SEC.
+
+        Accumulates ``elapsed`` seconds and, once the interval is reached, runs
+        reload_config and resets the accumulator. Returns True only when a reload
+        actually reported changes. Keeps file polling and its save calls off the
+        high-frequency render tick.
+        """
+        self.seconds_since_config_poll += elapsed
+        if self.seconds_since_config_poll < self.CONFIG_POLL_INTERVAL_SEC:
+            return False
+        self.seconds_since_config_poll = 0.0
+        return self.reload_config()
+
     def reload_config(self, force: bool = False) -> bool:
         """Check both files for changes and reload if needed. Returns True if either was reloaded."""
         self.cache.save_file()
@@ -821,6 +840,7 @@ class App:
                 self.build(self.input.prompt()),
                 console=_console,
                 refresh_per_second=self.config.ui_refresh_rate,
+                #auto_refresh=False,
                 screen=True,
             ) as live:
                 while self.running:
@@ -839,7 +859,7 @@ class App:
 
                     self._check_pending_editor(live)
 
-                    if self.reload_config():
+                    if self._poll_config_if_due(self.config.ui_refresh_interval_sec):
                         self._start_refresh()
                         self.needs_visual_update = True
                     elif self.seconds_since_refresh >= self.config.interval:

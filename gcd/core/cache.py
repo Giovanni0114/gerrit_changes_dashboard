@@ -75,6 +75,7 @@ class SshCache:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._entries: dict[str, CacheEntry] = {}
+        self._dirty: bool = False
         self.load_file()
         self._file_mtime: float = self._mtime()
 
@@ -109,11 +110,16 @@ class SshCache:
             except (TypeError, ValueError) as exc:
                 _log.warning("skipping malformed cache entry %s: %s", key, exc)
         self._entries = loaded
+        self._dirty = False
 
-    def save_file(self) -> None:
+    def save_file(self) -> bool:
+        if not self._dirty:
+            return False
         data = {key: entry.to_json() for key, entry in self._entries.items()}
         self.path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         self._file_mtime = self._mtime()
+        self._dirty = False
+        return True
 
     def get(self, change: TrackedChange) -> CacheEntry | None:
         return self._entries.get(_key(change.number, change.instance))
@@ -123,12 +129,16 @@ class SshCache:
 
     def cache(self, change: TrackedChange) -> None:
         self._entries[_key(change.number, change.instance)] = CacheEntry.from_change(change)
+        self._dirty = True
 
     def evict(self, keep: set[tuple[int, str]]) -> int:
         keep_keys = {_key(n, i) for n, i in keep}
         before = len(self._entries)
         self._entries = {k: v for k, v in self._entries.items() if k in keep_keys}
-        return before - len(self._entries)
+        removed = before - len(self._entries)
+        if removed:
+            self._dirty = True
+        return removed
 
     def hydrate(self, ch: TrackedChange) -> None:
         if (entry := self.get(ch)) is None:
