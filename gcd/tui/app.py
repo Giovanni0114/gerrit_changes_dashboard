@@ -761,7 +761,7 @@ class App:
             return None
         return changes[0].comments[-1]
 
-    def open_comment_link(self, rows: Index, comment_idx: Index) -> None:
+    def open_comment_link(self, rows: Index, comment_idx: Index, new_window: bool = False) -> None:
         for ch in self._resolve_index_for_all(rows):
             comments = ch.comments
             if comment_idx.wildcard:
@@ -769,7 +769,8 @@ class App:
             else:
                 targets = [comments[ci - 1] for ci in comment_idx if 0 < ci <= len(comments)]
             for url in extract_urls("\n".join(targets)):
-                webbrowser.open(url)
+                webbrowser.open(url, 1 if new_window else 0)
+                new_window = False
 
     # --- Threading ---
 
