@@ -169,7 +169,7 @@ Add to `gcd/cli/query.py` (below `convert_date`). Note the module takes a small 
 import re
 from collections.abc import Mapping
 
-_BARE_WORD = re.compile(r"^[A-Za-z0-9@._-]+$")
+_BARE_WORD = re.compile(r"^[A-Za-z0-9@._/-]+$")  # includes / so project paths stay unquoted
 
 
 def _quote(value: str) -> str:
