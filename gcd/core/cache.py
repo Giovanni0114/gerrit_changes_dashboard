@@ -12,6 +12,7 @@ _log = app_logger()
 class CacheEntry:
     subject: str | None = None
     project: str | None = None
+    owner: dict | None = None
     url: str | None = None
     current_revision: str | None = None
     current_patchset_number: int | None = None
@@ -25,6 +26,7 @@ class CacheEntry:
         return cls(
             subject=ch.subject,
             project=ch.project,
+            owner=ch.owner.copy() if ch.owner else None,
             url=ch.url,
             current_revision=ch.current_revision,
             current_patchset_number=ch.current_patchset_number,
@@ -38,6 +40,7 @@ class CacheEntry:
         return {
             "subject": self.subject,
             "project": self.project,
+            "owner": self.owner,
             "url": self.url,
             "current_revision": self.current_revision,
             "current_patchset_number": self.current_patchset_number,
@@ -57,9 +60,12 @@ class CacheEntry:
         return cls(
             subject=data.get("subject"),
             project=data.get("project"),
+            owner=data.get("owner") if isinstance(data.get("owner"), dict) else None,
             url=data.get("url"),
             current_revision=data.get("current_revision"),
-            current_patchset_number=data.get("current_patchset_number"),
+            current_patchset_number=(
+                int(data["current_patchset_number"]) if data.get("current_patchset_number") is not None else None
+            ),
             submitted=bool(data.get("submitted", False)),
             abandoned=bool(data.get("abandoned", False)),
             is_wip=bool(data.get("is_wip", False)),
@@ -146,8 +152,10 @@ class SshCache:
 
         ch.subject = entry.subject
         ch.project = entry.project
+        ch.owner = entry.owner.copy() if entry.owner else None
         ch.url = entry.url
         ch.current_revision = entry.current_revision
+        ch.current_patchset_number = entry.current_patchset_number
         ch.submitted = entry.submitted
         ch.abandoned = entry.abandoned
         ch.is_wip = entry.is_wip

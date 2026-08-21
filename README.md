@@ -43,7 +43,30 @@ python3 gerrit_changes_dashboard.py
 Or specify a custom config file:
 
 ```bash
-python3 gerrit_changes_dashboard.py /path/to/custom/config.toml
+python3 gerrit_changes_dashboard.py --config /path/to/custom/config.toml
+```
+
+### CLI board
+
+Print every change currently tracked by the TUI using only local `cache.json`
+data:
+
+```bash
+uv run gcd board
+```
+
+The default command makes no Gerrit or SSH requests. Refresh tracked changes and
+save successful results back to the cache explicitly:
+
+```bash
+uv run gcd board --reload
+```
+
+Use `--json` with either mode for normalized machine-readable output:
+
+```bash
+uv run gcd board --json
+uv run gcd board --reload --json
 ```
 
 ## Keyboard shortcuts

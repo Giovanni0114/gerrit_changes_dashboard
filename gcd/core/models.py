@@ -85,6 +85,7 @@ class TrackedChange:
     # --- data from gerrit ---
     subject: str | None = None
     project: str | None = None
+    owner: dict | None = None
     url: str | None = None
     current_revision: str | None = None
     current_patchset_number: int | None = None

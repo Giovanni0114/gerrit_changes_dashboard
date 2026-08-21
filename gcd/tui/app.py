@@ -67,6 +67,8 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache, plugin_
 
     ch.subject = data.get("subject")
     ch.project = data.get("project")
+    owner = data.get("owner")
+    ch.owner = owner.copy() if isinstance(owner, dict) else None
     ch.url = data.get("url")
 
     patch_set = data.get("currentPatchSet", {})
@@ -921,6 +923,7 @@ def main() -> None:
     import argparse
     import sys
 
+    from gcd.cli.board import run as board_run
     from gcd.cli.query import run as query_run
     from gcd.core.config import generate_example_config
     from gcd.core.logs import setup_logging
@@ -961,6 +964,14 @@ def main() -> None:
     query_parser.add_argument("--limit", type=int, help="limit:N")
     query_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a table")
 
+    board_parser = subparsers.add_parser("board", help="Print tracked changes from local cache")
+    board_parser.add_argument("--json", action="store_true", help="Emit JSON instead of tables")
+    board_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Refresh tracked changes from Gerrit and update cache",
+    )
+
     args = parser.parse_args()
     config_path = Path(args.config)
 
@@ -980,6 +991,8 @@ def main() -> None:
 
     if args.command == "query":
         sys.exit(query_run(config, args))
+    if args.command == "board":
+        sys.exit(board_run(config, args))
 
     if args.clear_cache:
         config.cache_path.unlink(missing_ok=True)
