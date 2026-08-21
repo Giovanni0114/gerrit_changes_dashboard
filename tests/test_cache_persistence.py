@@ -60,3 +60,52 @@ def test_evict_removing_nothing_stays_clean(tmp_path):
 
     cache.evict({(1, "prod")})  # keep everything
     assert cache.save_file() is False
+
+
+def test_owner_and_patchset_round_trip_through_cache(tmp_path):
+    path = tmp_path / "cache.json"
+    cache = SshCache(path)
+    source = TrackedChange(
+        number=1,
+        instance="prod",
+        owner={"name": "Jane Doe", "email": "jane@example.com"},
+        current_patchset_number=4,
+    )
+
+    cache.cache(source)
+    assert cache.save_file() is True
+
+    target = TrackedChange(number=1, instance="prod")
+    SshCache(path).hydrate(target)
+
+    assert target.owner == {"name": "Jane Doe", "email": "jane@example.com"}
+    assert target.current_patchset_number == 4
+
+
+def test_cache_without_owner_remains_readable(tmp_path):
+    path = tmp_path / "cache.json"
+    path.write_text(
+        json.dumps(
+            {
+                "1:prod": {
+                    "subject": "cached subject",
+                    "project": "team/project",
+                    "url": None,
+                    "current_revision": None,
+                    "current_patchset_number": "4",
+                    "submitted": False,
+                    "abandoned": False,
+                    "is_wip": False,
+                    "approvals": [],
+                }
+            }
+        )
+        + "\n"
+    )
+    target = TrackedChange(number=1, instance="prod")
+
+    SshCache(path).hydrate(target)
+
+    assert target.subject == "cached subject"
+    assert target.owner is None
+    assert target.current_patchset_number == 4
