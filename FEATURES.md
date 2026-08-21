@@ -46,6 +46,20 @@ Full specs are in `spec/features/EPIC003-verification-comments/` but only on
 
 ---
 
+## 026 | Gerrit HTTP connection configuration
+
+Add optional per-instance `http_*` settings for future Gerrit REST API clients:
+an explicit base URL, optional basic-auth credentials, request timeout, and TLS
+verification. Parse them into a typed immutable value on `GerritInstance` with
+strict startup validation and safe defaults.
+
+This feature adds configuration infrastructure only. It makes no HTTP requests,
+does not replace SSH operations, and does not change the `ci_errors` plugin.
+
+Full spec in `spec/features/026-gerrit-http-config/spec.md`.
+
+---
+
 ## 015 | Navigation and selecting using arrows
 
 If the arrow is used when index is expected:
@@ -150,5 +164,4 @@ This SPIKE supersedes EPIC002 — if CLI is built, EPIC002 becomes unnecessary.
 ## 016 | Design CLI tool
 
 ---
-
 
