@@ -25,12 +25,22 @@ class ApprovalEntry:
 
 
 @dataclass(frozen=True)
+class GerritHttpConfig:
+    url: str
+    username: str | None = None
+    password: str | None = field(default=None, repr=False)
+    timeout: float = 10.0
+    verify_tls: bool = True
+
+
+@dataclass(frozen=True)
 class GerritInstance:
     name: str
     host: str
     port: int
     email: str | None
     enabled_plugins: frozenset[str] = field(default_factory=frozenset)
+    http: GerritHttpConfig | None = None
 
     def __post_init__(self) -> None:
         if self.email is None:

@@ -2,9 +2,10 @@ import os
 import tomllib
 from enum import Enum
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from gcd.core.logs import app_logger
-from gcd.core.models import GerritInstance
+from gcd.core.models import GerritHttpConfig, GerritInstance
 
 from .field import Field
 from .parsers import (
@@ -23,6 +24,17 @@ DEFAULT_REFRESH_RATE = 20
 DEFAULT_CHANGES_FILENAME = "changes.json"
 DEFAULT_CACHE_FILENAME = "cache.json"
 DEFAULT_LOG_DIRNAME = "log"
+DEFAULT_HTTP_TIMEOUT = 10.0
+DEFAULT_HTTP_VERIFY_TLS = True
+HTTP_CONFIG_KEYS = frozenset(
+    {
+        "http_url",
+        "http_username",
+        "http_password",
+        "http_timeout",
+        "http_verify_tls",
+    }
+)
 
 
 class Layout(Enum):
@@ -51,6 +63,70 @@ _FIELDS: list[Field] = [
 ]
 
 _logger = app_logger()
+
+
+def _parse_http_config(instance_name: str, data: dict) -> GerritHttpConfig | None:
+    present_keys = HTTP_CONFIG_KEYS.intersection(data)
+    if not present_keys:
+        return None
+
+    if "http_url" not in data:
+        raise ValueError(f"Gerrit instance '{instance_name}' has HTTP options but no 'http_url'")
+
+    raw_url = data["http_url"]
+    if not isinstance(raw_url, str):
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_url': expected a string")
+
+    try:
+        parsed = urlsplit(raw_url)
+        _ = parsed.port
+    except ValueError as ex:
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_url'") from ex
+
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_url': expected an absolute HTTP(S) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError(
+            f"Gerrit instance '{instance_name}' has invalid 'http_url': embedded credentials are not allowed"
+        )
+    if parsed.query or parsed.fragment:
+        raise ValueError(
+            f"Gerrit instance '{instance_name}' has invalid 'http_url': query and fragment are not allowed"
+        )
+
+    normalized_path = parsed.path.rstrip("/")
+    if normalized_path == "/a" or normalized_path.endswith("/a"):
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_url': omit Gerrit's '/a' prefix")
+
+    username_present = "http_username" in data
+    password_present = "http_password" in data
+    if username_present != password_present:
+        missing = "http_password" if username_present else "http_username"
+        raise ValueError(f"Gerrit instance '{instance_name}' must define '{missing}' for HTTP basic authentication")
+
+    username = data.get("http_username")
+    password = data.get("http_password")
+    if username_present and (not isinstance(username, str) or not username):
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_username': expected a non-empty string")
+    if password_present and (not isinstance(password, str) or not password):
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_password': expected a non-empty string")
+
+    timeout = data.get("http_timeout", DEFAULT_HTTP_TIMEOUT)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not timeout > 0:
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_timeout': expected a positive number")
+
+    verify_tls = data.get("http_verify_tls", DEFAULT_HTTP_VERIFY_TLS)
+    if not isinstance(verify_tls, bool):
+        raise ValueError(f"Gerrit instance '{instance_name}' has invalid 'http_verify_tls': expected a boolean")
+
+    url = urlunsplit((parsed.scheme, parsed.netloc, normalized_path, "", ""))
+    return GerritHttpConfig(
+        url=url,
+        username=username,
+        password=password,
+        timeout=float(timeout),
+        verify_tls=verify_tls,
+    )
 
 
 class AppConfig:
@@ -122,7 +198,17 @@ class AppConfig:
             email = ins.get("email") or default_email
             enabled_plugins = frozenset(ins.get("plugins_enabled", []) + default_plugins)
 
-            self.instances.append(GerritInstance(name, host, port, email, enabled_plugins))
+            http = _parse_http_config(name, ins)
+            self.instances.append(
+                GerritInstance(
+                    name=name,
+                    host=host,
+                    port=port,
+                    email=email,
+                    enabled_plugins=enabled_plugins,
+                    http=http,
+                )
+            )
 
         if not self.instances:
             raise ValueError("No Gerrit instances configured. Please specify at least one instance in the config file.")
@@ -220,6 +306,11 @@ def generate_example_config(path: Path) -> None:
         "# port = 22",
         '# email = "you@example.com"',
         "# plugins_enabled = []",
+        '# http_url = "https://gerrit.example.com"',
+        '# http_username = "you"',
+        '# http_password = "secret-or-http-token"  # plaintext; protect this file',
+        "# http_timeout = 10",
+        "# http_verify_tls = true",
     ]
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
