@@ -125,6 +125,7 @@ class App:
         self._pause_keys = Event()
 
         self.needs_visual_update = False
+        self._last_console_size = _console.size
 
         self._sync_cache_with_changes()
 
@@ -519,8 +520,21 @@ class App:
 
     def visual_update_if_needed(self, live: Live, force: bool = False) -> None:
         if self.needs_visual_update:
-            live.update(self.build(self.input.prompt()))
+            # auto_refresh is disabled on the Live, so force the paint ourselves.
+            live.update(self.build(self.input.prompt()), refresh=True)
             self.needs_visual_update = False
+
+    def _check_terminal_resize(self) -> None:
+        """Flag a repaint on terminal resize.
+
+        The Live auto-refresh thread used to cover resizes implicitly; with it
+        disabled we poll the console size (a cheap ioctl) and repaint only when
+        the dimensions actually change.
+        """
+        size = _console.size
+        if size != self._last_console_size:
+            self._last_console_size = size
+            self.needs_visual_update = True
 
     # --- AppContext interface (called by InputHandler) ---
 
@@ -747,7 +761,7 @@ class App:
             return None
         return changes[0].comments[-1]
 
-    def open_comment_link(self, rows: Index, comment_idx: Index) -> None:
+    def open_comment_link(self, rows: Index, comment_idx: Index, new_window: bool = False) -> None:
         for ch in self._resolve_index_for_all(rows):
             comments = ch.comments
             if comment_idx.wildcard:
@@ -755,7 +769,8 @@ class App:
             else:
                 targets = [comments[ci - 1] for ci in comment_idx if 0 < ci <= len(comments)]
             for url in extract_urls("\n".join(targets)):
-                webbrowser.open(url)
+                webbrowser.open(url, 1 if new_window else 0)
+                new_window = False
 
     # --- Threading ---
 
@@ -839,8 +854,7 @@ class App:
             with Live(
                 self.build(self.input.prompt()),
                 console=_console,
-                refresh_per_second=self.config.ui_refresh_rate,
-                #auto_refresh=False,
+                auto_refresh=False,
                 screen=True,
             ) as live:
                 while self.running:
@@ -858,6 +872,8 @@ class App:
                         return
 
                     self._check_pending_editor(live)
+
+                    self._check_terminal_resize()
 
                     if self._poll_config_if_due(self.config.ui_refresh_interval_sec):
                         self._start_refresh()

@@ -15,7 +15,7 @@ from gcd.core.models import GerritInstance
 
 _BARE_WORD = re.compile(r"^[A-Za-z0-9@._/-]+$")
 
-PROJECT_WIDTH = 30
+PROJECT_WIDTH = 25
 
 
 def convert_date(value: str) -> str:
@@ -90,9 +90,9 @@ def _truncate_project(path: str, width: int = PROJECT_WIDTH) -> str:
 def render_table(console: Console, instance_name: str, changes: list[dict]) -> None:
     table = Table(title=instance_name, title_style="bold white reverse", expand=True)
     table.add_column("Number", style="magenta", no_wrap=True)
-    table.add_column("Project", width=PROJECT_WIDTH, no_wrap=True)
+    table.add_column("Project", max_width=PROJECT_WIDTH, no_wrap=True)
     table.add_column("Subject", ratio=1)
-    table.add_column("Owner", no_wrap=True)
+    table.add_column("Owner", no_wrap=True, max_width=25)
 
     for change in changes:
         number = str(change.get("number", "?"))
@@ -101,7 +101,7 @@ def render_table(console: Console, instance_name: str, changes: list[dict]) -> N
         table.add_row(
             number_cell,
             _truncate_project(change.get("project", "")),
-            change.get("subject", ""),
+            Text(change.get("subject", "")),
             _owner_name(change),
         )
 

@@ -25,12 +25,22 @@ class ApprovalEntry:
 
 
 @dataclass(frozen=True)
+class GerritHttpConfig:
+    url: str
+    username: str | None = None
+    password: str | None = field(default=None, repr=False)
+    timeout: float = 10.0
+    verify_tls: bool = True
+
+
+@dataclass(frozen=True)
 class GerritInstance:
     name: str
     host: str
     port: int
     email: str | None
     enabled_plugins: frozenset[str] = field(default_factory=frozenset)
+    http: GerritHttpConfig | None = None
 
     def __post_init__(self) -> None:
         if self.email is None:
@@ -182,7 +192,7 @@ class AppContext(Protocol):
     def edit_last_comment(self, row: Index, text: str) -> None: ...
     def delete_comment(self, row: Index, comment_idx: Index) -> None: ...
     def delete_comment_all_tags(self, row: Index) -> None: ...
-    def open_comment_link(self, rows: Index, comment_idx: Index) -> None: ...
+    def open_comment_link(self, rows: Index, comment_idx: Index, new_window: bool = False) -> None: ...
 
     # --- Additional change info ---
 
