@@ -173,6 +173,7 @@ class InputHandler:
         self.context: dict[str, str] = {}
         self.current_action: LeafAction | None = None
         self.current_index: Index | None = None
+        self.tags_rotation: list[str] = []
 
     def hints(self) -> str:
         """Return keyboard shortcut hints for the current input state."""
@@ -224,7 +225,7 @@ class InputHandler:
             completed = self._handle_input(key)
             if completed:
                 self._try_execute()
-            elif self.current_field.name == "idx":
+            elif self.current_field and self.current_field.name == "idx":
                 self.current_index = parse_idx_notation(self.input or "")
             return
 
@@ -290,6 +291,7 @@ class InputHandler:
         self.input = None
         self.current_field = None
         self.sequence = []
+        self.tags_rotation = []
         self.context = {}
         self.current_action = None
         self.current_index = None
@@ -305,7 +307,21 @@ class InputHandler:
             return True
 
         if key == "<bs>":
+            self.tags_rotation = []
             self.input = (self.input or "")[:-1]
+            return False
+
+        if key == "<tab>" and self.current_field.name == TEXT_FIELD.name and self.input and self.input.startswith("#"):
+            if not self.tags_rotation:
+                self.tags_rotation = sorted(
+                    tag for tag in self.app_context.changes.get_all_tags() if tag.startswith(self.input)
+                )
+            else:
+                self.tags_rotation = [*self.tags_rotation[1:], self.tags_rotation[0]]
+
+            if self.tags_rotation:
+                self.input = self.tags_rotation[0]
+
             return False
 
         if key in self.current_field.special_chars:
@@ -317,6 +333,7 @@ class InputHandler:
         if self.current_field.digits_only and not key.isdigit() and key not in self.current_field.extra_chars:
             return False
 
+        self.tags_rotation = []
         self.input = (self.input or "") + key
 
         if self.current_field.name == "idx":
@@ -326,6 +343,6 @@ class InputHandler:
 
     def selected_rows(self) -> frozenset[int]:
         if not self.current_index:
-            return set()
+            return frozenset()
 
         return self.current_index.values

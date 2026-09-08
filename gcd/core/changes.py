@@ -92,7 +92,7 @@ class Changes:
         return [ch for ch in self._changes if ch.deleted]
 
     def get_all_tags(self) -> set[str]:
-        return set(ch.tags for ch in self._changes)
+        return set(ch.tags for ch in self._changes if ch.tags)
 
     def get_all_per_tag(self) -> dict[str, list[TrackedChange]]:
         per_tag = {"no tags": []}
@@ -106,7 +106,7 @@ class Changes:
 
         return per_tag
 
-    def get_all_per_project(self) -> dict[str, list[TrackedChange]]:
+    def get_all_per_project(self) -> dict[str | None, list[TrackedChange]]:
         per_project = {}
         for ch in self._changes:
             if ch.project in per_project:

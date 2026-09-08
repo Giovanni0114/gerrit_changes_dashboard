@@ -17,7 +17,7 @@ from gcd.core.changes import Changes
 from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
-from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange
+from gcd.core.models import ApprovalEntry, ChangeIdentifier, GerritInstance, Index, TrackedChange
 from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
 from gcd.tui.display import (
@@ -439,7 +439,7 @@ class App:
 
     # --- Display methods ---
 
-    def make_tables(self) -> list[Table]:
+    def make_tables(self) -> tuple[list[Table], list[ChangeIdentifier]]:
         tables = []
         map = []
 
@@ -516,9 +516,9 @@ class App:
 
         self.changes.set_map(map)
 
-        return build_layout(header, tables, footer, prompt=prompt_msg, show_header=self.config.show_header)
+        return build_layout(header, tables, footer, prompt=prompt_msg, show_header=self.config.show_header or False)
 
-    def visual_update_if_needed(self, live: Live, force: bool = False) -> None:
+    def visual_update_if_needed(self, live: Live) -> None:
         if self.needs_visual_update:
             # auto_refresh is disabled on the Live, so force the paint ourselves.
             live.update(self.build(self.input.prompt()), refresh=True)
