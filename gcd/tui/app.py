@@ -17,7 +17,7 @@ from gcd.core.changes import Changes
 from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
-from gcd.core.models import ApprovalEntry, GerritInstance, Index, TrackedChange, ChangeIdentifier
+from gcd.core.models import ApprovalEntry, ChangeIdentifier, GerritInstance, Index, TrackedChange
 from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
 from gcd.tui.display import (
