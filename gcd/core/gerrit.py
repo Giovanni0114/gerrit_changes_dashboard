@@ -2,7 +2,7 @@ import json
 from typing import Literal
 
 from gcd.core.logs import ssh_logger
-from gcd.core.models import GerritInstance
+from gcd.core.models import CommentQueryResult, CommentRecord, GerritInstance
 
 from .ssh import SSHCommunication
 
@@ -10,6 +10,7 @@ _log = ssh_logger()
 
 GerritSubcommand = Literal["review", "query"]
 GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "submit"]
+JsonRecord = dict[str, object]
 
 
 def _base_ssh_cmd(instance: GerritInstance) -> list[str]:
@@ -36,7 +37,7 @@ class GerritCommunication:
     def ssh_request_count(self) -> int:
         return self.ssh_communication.request_count.value()
 
-    def _query(self, instance: GerritInstance, *query_args: str) -> list[dict]:
+    def _query(self, instance: GerritInstance, *query_args: str) -> list[JsonRecord]:
         base_cmd = _base_ssh_query_cmd(instance)
         cmd = [*base_cmd, *query_args]
 
@@ -46,20 +47,32 @@ class GerritCommunication:
             return [{"error": result.msg}]
 
         lines = result.data.splitlines()
-        changes = []
+        changes: list[JsonRecord] = []
 
         for line in lines:
             if not line.strip():
                 continue
             try:
-                obj = json.loads(line)
+                decoded = json.loads(line)
             except json.JSONDecodeError as ex:
-                obj = {"error": str(ex)}
+                changes.append({"error": str(ex)})
+                continue
 
-            if obj.get("type") == "stats":
-                _log.info(f"ssh gerrit query stats: {obj}")
+            if not isinstance(decoded, dict):
+                changes.append({"error": "Expected JSON object"})
+                continue
+
+            obj: JsonRecord = {}
+            for key, value in decoded.items():
+                if not isinstance(key, str):
+                    changes.append({"error": "Expected string JSON object keys"})
+                    break
+                obj[key] = value
             else:
-                changes.append(obj)
+                if obj.get("type") == "stats":
+                    _log.info(f"ssh gerrit query stats: {obj}")
+                else:
+                    changes.append(obj)
 
         return changes
 
@@ -107,7 +120,7 @@ class GerritCommunication:
 
         return {"error": "Change not found"}
 
-    def query_change_comments(self, instance: GerritInstance, change_id: str) -> list[dict]:
+    def query_change_comments(self, instance: GerritInstance, change_id: str) -> CommentQueryResult:
         changes = self._query(instance, change_id, "--comments")
 
         if not changes:
@@ -115,13 +128,26 @@ class GerritCommunication:
 
         change = next(iter(changes))
 
-        if "comments" not in change:
+        comments = change.get("comments")
+        if not isinstance(comments, list):
             return {"error": "Could not get comments"}
 
-        return change["comments"]
+        comment_records: list[CommentRecord] = []
+        for comment in comments:
+            if not isinstance(comment, dict):
+                return {"error": "Could not get comments"}
 
-    def query_open_changes(self, instance: GerritInstance) -> list[dict]:
+            record: CommentRecord = {}
+            for key, value in comment.items():
+                if not isinstance(key, str):
+                    return {"error": "Could not get comments"}
+                record[key] = value
+            comment_records.append(record)
+
+        return comment_records
+
+    def query_open_changes(self, instance: GerritInstance) -> list[JsonRecord]:
         return self._query(instance, f"owner:{instance.email}", "is:open")
 
-    def query_operators(self, instance: GerritInstance, operators: list[str]) -> list[dict]:
+    def query_operators(self, instance: GerritInstance, operators: list[str]) -> list[JsonRecord]:
         return self._query(instance, *operators)

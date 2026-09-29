@@ -4,12 +4,16 @@ run:
 debug:
     LOG_LEVEL=DEBUG uv run gcd
 
-ruff:
-	ruff check . --fix
-	ruff format .
+fix:
+    uv run ruff check . --fix
+    uv run ruff format
+
+check:
+    uv run ruff check .
+    uv run ty check gcd
 
 test:
-	uv run pytest
+    uv run pytest
 
 logs:
     tail -f log/ssh.log log/app.log log/plugin.log

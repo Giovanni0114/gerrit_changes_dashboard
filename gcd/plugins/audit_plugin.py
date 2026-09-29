@@ -14,8 +14,8 @@ class AuditPlugin(BasePlugin):
     def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
         self.log.info(f"on_activate {change_id}")
 
-    def on_new_change(self, change_id: ChangeIdentifier) -> None:
-        self.log.info(f"on_new_change {change_id}")
+    def on_new_change(self, new_change: TrackedChange) -> None:
+        self.log.info(f"on_new_change {new_change.id}")
 
     def on_new_comment(self, change_id: ChangeIdentifier, new_comment: str) -> None:
         self.log.info(f"on_new_comment {change_id}, new comments: {new_comment}")

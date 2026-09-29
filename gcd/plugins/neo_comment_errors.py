@@ -43,10 +43,10 @@ class CommentCatcher(BasePlugin):
     def on_exit(self) -> None:
         pass
 
-    def on_activate(self, change_id: ChangeIdentifier, ch: TrackedChange) -> None:
+    def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
         self.log.info(f"on_activate: {change_id}")
 
-        comments = self.ctx.fetch_comments_from_change(ch)
+        comments = self.ctx.fetch_comments_from_change(change)
         if not isinstance(comments, list):
             self.log.error(f"on_activate: could not fetch comments for {change_id}: {comments}")
             return
@@ -54,12 +54,12 @@ class CommentCatcher(BasePlugin):
         # Walk newest -> oldest and act on the first CI comment we recognise.
         for comment in reversed(comments):
             msg = comment.get("message", "") if isinstance(comment, dict) else ""
-            if not msg:
+            if not isinstance(msg, str) or not msg:
                 continue
 
             self.log.debug(msg)
 
-            if self._handle_ci_comment(ch, msg):
+            if self._handle_ci_comment(change, msg):
                 return
 
     def _handle_ci_comment(self, ch: TrackedChange, msg: str) -> bool:

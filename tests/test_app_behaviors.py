@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from helpers import add, idx
 
 from gcd.core.models import ApprovalEntry, ChangeIdentifier
@@ -24,6 +25,45 @@ def test_add_change_appends_to_store(app):
     assert app.changes.count() == before + 1
     assert app.changes.by_id(ChangeIdentifier(456, "prod")) is not None
     assert app.status_msg  # a status message was set
+
+
+def test_add_change_emits_tracked_change(app):
+    app.plugin_manager.emit = MagicMock()
+
+    app.add_change(456, "prod")
+
+    change = app.changes.by_id(ChangeIdentifier(456, "prod"))
+    assert change is not None
+    event, instance, emitted_change = app.plugin_manager.emit.call_args.args
+    assert (event, instance) == ("new_change", "prod")
+    assert emitted_change is change
+
+
+def test_fetch_open_changes_emits_tracked_change(app):
+    app.plugin_manager.emit = MagicMock()
+    app.gerrit_comm.open_changes = [{"number": 789, "currentPatchSet": {}}]
+    instance = app.config.get_instance_by_name("prod")
+    assert instance is not None
+
+    assert app._fetch_open_changes_from_instance(instance) == 1
+
+    change = app.changes.by_id(ChangeIdentifier(789, "prod"))
+    assert change is not None
+    event, instance, emitted_change = app.plugin_manager.emit.call_args.args
+    assert (event, instance) == ("new_change", "prod")
+    assert emitted_change is change
+
+
+@pytest.mark.parametrize("number", [None, "789", True, 0, -1])
+def test_fetch_open_changes_ignores_invalid_change_numbers(app, number):
+    app.plugin_manager.emit = MagicMock()
+    app.gerrit_comm.open_changes = [{"number": number, "currentPatchSet": {}}]
+    instance = app.config.get_instance_by_name("prod")
+    assert instance is not None
+
+    assert app._fetch_open_changes_from_instance(instance) == 0
+    assert app.changes.count() == 0
+    app.plugin_manager.emit.assert_not_called()
 
 
 # --- toggles ---
@@ -78,6 +118,15 @@ def test_delete_comment_all_tags_removes_tags(app):
     app.delete_comment_all_tags(idx(1))
 
     assert ch.comments == ["note", "follow-up"]
+
+
+def test_fetch_comments_returns_error_for_missing_instance(app):
+    ch = add(app, 1, instance="missing")
+
+    result = app.fetch_comments_from_change(ch)
+
+    assert result == {"error": "Instance not found"}
+    assert "cannot find instance 'missing'" in app.status_msg
 
 
 # --- delete / restore lifecycle ---

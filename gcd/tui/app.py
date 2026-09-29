@@ -17,7 +17,7 @@ from gcd.core.changes import Changes
 from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
-from gcd.core.models import ApprovalEntry, ChangeIdentifier, GerritInstance, Index, TrackedChange
+from gcd.core.models import ApprovalEntry, ChangeIdentifier, CommentQueryResult, GerritInstance, Index, TrackedChange
 from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
 from gcd.tui.display import (
@@ -355,11 +355,11 @@ class App:
 
     # --- gerrit fetch additional info ---
 
-    def fetch_comments_from_change(self, ch: TrackedChange) -> list[dict]:
+    def fetch_comments_from_change(self, ch: TrackedChange) -> CommentQueryResult:
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
-            return
+            return {"error": "Instance not found"}
 
         return self.gerrit_comm.query_change_comments(instance, str(ch.number))
 
@@ -613,7 +613,7 @@ class App:
     def add_change(self, number: int, instance: str) -> None:
         new_change = TrackedChange(number=number, instance=instance)
         self.changes.append(new_change)
-        self.plugin_manager.emit("new_change", new_change.instance, new_change.id, new_change)
+        self.plugin_manager.emit("new_change", new_change.instance, new_change)
         self.status_msg = f"[green]Added {number} @ {instance}[/green]"
         _log.info("change added number=%d instance=%s", number, instance)
 
@@ -669,13 +669,16 @@ class App:
 
             number = change_data.get("number")
 
-            if number is None or number in numbers_in_changes:
+            if not isinstance(number, int) or isinstance(number, bool) or number <= 0:
+                continue
+
+            if number in numbers_in_changes:
                 continue
 
             ch = TrackedChange(number=number, instance=instance.name)
             _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
-            self.plugin_manager.emit("new_change", ch.instance, ch.id)
+            self.plugin_manager.emit("new_change", ch.instance, ch)
             numbers_in_changes.add(number)
             added += 1
 

@@ -138,7 +138,7 @@ class AppConfig:
     changes_path: Path
     cache_path: Path
     log_path: Path
-    hide_tags: list[str]
+    hide_tags: list[object]
 
     show_header: bool | None
     layout: Layout = Layout.DEFAULT

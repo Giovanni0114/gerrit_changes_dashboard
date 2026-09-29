@@ -1,5 +1,6 @@
 import logging
 import os
+from collections.abc import MutableMapping
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -64,9 +65,11 @@ def ssh_logger() -> logging.Logger:
     return logging.getLogger(_SSH)
 
 
-def plugin_logger(plugin_name: str, instance_name: str) -> logging.Logger:
-    class PluginLogger(logging.LoggerAdapter):
-        def process(self, msg, kwargs):
+def plugin_logger(plugin_name: str, instance_name: str) -> logging.LoggerAdapter[logging.Logger]:
+    class PluginLogger(logging.LoggerAdapter[logging.Logger]):
+        def process(
+            self, msg: object, kwargs: MutableMapping[str, object]
+        ) -> tuple[object, MutableMapping[str, object]]:
             return f"[{plugin_name}:{instance_name}] {msg}", kwargs
 
-    return PluginLogger(logging.getLogger(_PLUGIN))
+    return PluginLogger(logging.getLogger(_PLUGIN), {})
