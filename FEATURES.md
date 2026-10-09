@@ -46,6 +46,17 @@ Full specs are in `spec/features/EPIC003-verification-comments/` but only on
 
 ---
 
+## 028 | Publish Gerrit review messages
+
+Add a TUI review action that publishes the same one-line message to one or more
+tracked changes through Gerrit's SSH `review --message` option. The action uses
+`Space`, `r`, `p`, accepts existing index notation, reports partial failures,
+and does not refresh unrelated change metadata after publishing.
+
+Full spec and test cases in `spec/features/028-review-message/`.
+
+---
+
 ## 026 | Gerrit HTTP connection configuration
 
 Add optional per-instance `http_*` settings for future Gerrit REST API clients:
