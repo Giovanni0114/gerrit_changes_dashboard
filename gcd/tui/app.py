@@ -257,6 +257,56 @@ class App:
             _log.info("code-review set change=%s instance=%s score=%d", ch.number, ch.instance, score)
             self._start_refresh()
 
+    def review_message(self, rows: Index, message: str) -> None:
+        if not message.strip():
+            self.status_msg = "[red]Cannot publish an empty message[/red]"
+            _log.warning("review message skipped: empty message")
+            return
+
+        changes = self._resolve_index(rows)
+        if not changes:
+            return
+
+        published = 0
+        failures: list[str] = []
+
+        for ch in changes:
+            if ch.current_revision is None:
+                failures.append(f"#{ch.number}: no current revision known")
+                _log.warning("review message skipped change=%s: no current revision", ch.number)
+                continue
+
+            instance = self.config.get_instance_by_name(ch.instance)
+            if instance is None:
+                failures.append(f"#{ch.number}: unknown instance '{ch.instance}'")
+                _log.warning("review message skipped change=%s: unknown instance=%s", ch.number, ch.instance)
+                continue
+
+            result = self.gerrit_comm.review_message(instance, ch.current_revision, message)
+            if "error" in result:
+                failures.append(f"#{ch.number}: {result['error']}")
+                _log.warning(
+                    "review message failed change=%s instance=%s error=%s",
+                    ch.number,
+                    ch.instance,
+                    result["error"],
+                )
+                continue
+
+            published += 1
+            _log.info("review message published change=%s instance=%s", ch.number, ch.instance)
+
+        if failures:
+            color = "yellow" if published else "red"
+            details = "; ".join(failures)
+            self.status_msg = (
+                f"[{color}]Message published to {published} of {len(changes)} changes; failed: {details}[/{color}]"
+            )
+            return
+
+        noun = "change" if published == 1 else "changes"
+        self.status_msg = f"[green]Message published to {published} {noun}[/green]"
+
     def review_abandon(self, rows: Index) -> None:
         for ch in self._resolve_index(rows):
             self._review_abandon(ch)

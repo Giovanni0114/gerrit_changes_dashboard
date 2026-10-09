@@ -207,6 +207,113 @@ def test_review_failure_surfaces_error_and_no_refresh(app):
     app._start_refresh.assert_not_called()
 
 
+def test_review_message_publishes_without_starting_refresh(app):
+    app._start_refresh = MagicMock()
+    add(app, 101, current_revision="deadbeef")
+
+    app.review_message(idx(1), "Looks good")
+
+    assert ("review_message", (app.config.default_instance, "deadbeef", "Looks good")) in app.gerrit_comm.calls
+    assert "1 change" in app.status_msg
+    assert "green" in app.status_msg
+    app._start_refresh.assert_not_called()
+
+
+def test_review_message_publishes_to_multiple_instances(app):
+    add(app, 101, current_revision="prod-revision")
+    add(app, 202, instance="staging", current_revision="staging-revision")
+
+    app.review_message(idx(1, 2), "Looks good")
+
+    assert app.gerrit_comm.calls == [
+        ("review_message", (app.config.default_instance, "prod-revision", "Looks good")),
+        ("review_message", (app.config.instances[1], "staging-revision", "Looks good")),
+    ]
+    assert "2 changes" in app.status_msg
+    assert "green" in app.status_msg
+
+
+@pytest.mark.parametrize("message", ["", "   "])
+def test_review_message_rejects_empty_or_whitespace_only_text(app, message):
+    add(app, 101, current_revision="deadbeef")
+
+    app.review_message(idx(1), message)
+
+    assert not app.gerrit_comm.called("review_message")
+    assert "empty" in app.status_msg.lower()
+    assert "red" in app.status_msg
+
+
+def test_review_message_reports_missing_revision_without_blocking_valid_change(app):
+    add(app, 101)
+    add(app, 202, current_revision="cafebabe")
+
+    app.review_message(idx(1, 2), "Please take another look")
+
+    assert app.gerrit_comm.calls == [
+        ("review_message", (app.config.default_instance, "cafebabe", "Please take another look"))
+    ]
+    assert "1 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "yellow" in app.status_msg
+
+
+def test_review_message_reports_gerrit_failure_without_blocking_later_change(app):
+    add(app, 101, current_revision="bad")
+    add(app, 202, current_revision="good")
+    responses = iter([{"error": "permission denied"}, {"success": True}])
+
+    def review_message(instance, revision, message):
+        app.gerrit_comm._record("review_message", instance, revision, message)
+        return next(responses)
+
+    app.gerrit_comm.review_message = review_message
+
+    app.review_message(idx(1, 2), "Please take another look")
+
+    assert [args[1] for name, args in app.gerrit_comm.calls if name == "review_message"] == ["bad", "good"]
+    assert "1 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "permission denied" in app.status_msg
+    assert "yellow" in app.status_msg
+
+
+def test_review_message_reports_unknown_instance_without_blocking_valid_change(app):
+    add(app, 101, instance="retired", current_revision="unknown")
+    add(app, 202, current_revision="good")
+
+    app.review_message(idx(1, 2), "Please take another look")
+
+    assert app.gerrit_comm.calls == [
+        ("review_message", (app.config.default_instance, "good", "Please take another look"))
+    ]
+    assert "1 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "retired" in app.status_msg
+    assert "yellow" in app.status_msg
+
+
+def test_review_message_preserves_no_matching_changes_error(app):
+    app.review_message(idx(9), "Looks good")
+
+    assert not app.gerrit_comm.called("review_message")
+    assert "No matching changes" in app.status_msg
+    assert "red" in app.status_msg
+
+
+def test_review_message_reports_every_failure_when_nothing_is_published(app):
+    add(app, 101)
+    add(app, 202, instance="retired", current_revision="unknown")
+
+    app.review_message(idx(1, 2), "Looks good")
+
+    assert not app.gerrit_comm.called("review_message")
+    assert "0 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "#202" in app.status_msg
+    assert "red" in app.status_msg
+
+
 # --- gerrit JSON -> model mapping ---
 
 

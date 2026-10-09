@@ -68,8 +68,8 @@ python3 gerrit_changes_dashboard.py /path/to/custom/config.toml
 | `Space` + `d` + `<idx>` | Toggle disabled status                    |
 | `Space` + `x` + `<idx>` | Toggle deletion or manage deleted changes |
 | `Space` + `o` + `<idx>` | Open change in web browser                |
-| `Space` + `s` + `<idx>` | Set Automerge +1 on change                |
 | `Space` + `c` + `<idx>` | Manage comments on change                 |
+| `Space` + `r`           | Open Gerrit review actions submenu        |
 
 
 ### e + [Key] - Editor Submenu
@@ -79,6 +79,18 @@ python3 gerrit_changes_dashboard.py /path/to/custom/config.toml
 | `e` + `c` | Open TOML config file in external editor |
 | `e` + `a` | Open JSON changes file in external editor (auto-reloads on save) |
 
+### Space + r + [Key] - Gerrit Review Actions
+
+| Keybind | Action |
+|---------|--------|
+| `Space` + `r` + `a` | Abandon selected change(s) |
+| `Space` + `r` + `b` | Rebase selected change(s) |
+| `Space` + `r` + `R` | Restore selected change(s) |
+| `Space` + `r` + `c` | Set Code-Review score |
+| `Space` + `r` + `m` | Set Automerge +1 |
+| `Space` + `r` + `p` | Publish a one-line message |
+| `Space` + `r` + `s` | Submit selected change(s) |
+
 ### Index Notation
 
 Most change management commands accept flexible index notation:
@@ -87,7 +99,7 @@ Most change management commands accept flexible index notation:
 - **Multiple**: `1,3,5` — changes at indices 1, 3, 5
 - **Range**: `1-5` — changes 1 through 5 (inclusive)
 - **Combined**: `1-2,5,7-9` — mix ranges and singles
-- **All**: `a` — apply to all changes (valid for `w`, `d`, `x`, `c` commands)
+- **All**: `a` — apply to all changes accepted by the current action, including publishing review messages
 
 Whitespace is ignored in index notation (e.g., `1-3, 5, 7-9` is valid).
 

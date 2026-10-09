@@ -101,6 +101,10 @@ class FakeGerrit:
         self._record("review_rebase", instance, revision)
         return dict(self.review_response)
 
+    def review_message(self, instance, revision, message):
+        self._record("review_message", instance, revision, message)
+        return dict(self.review_response)
+
 
 @pytest.fixture
 def config_path(tmp_path):

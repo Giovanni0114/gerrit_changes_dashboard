@@ -221,6 +221,14 @@ def review_restore_action(app_ctx: AppContext, ctx: Context) -> None:
     app_ctx.review_restore(idx)
 
 
+def review_message_action(app_ctx: AppContext, ctx: Context) -> None:
+    if (idx := parse_idx_notation(ctx["idx"])) is None:
+        app_ctx.status_msg = f"[red]Invalid idx parsed from: {ctx['idx']}[/red]"
+        return
+
+    app_ctx.review_message(idx, ctx["message"])
+
+
 def review_submit_action(app_ctx: AppContext, ctx: Context) -> None:
     if not (confirm := ctx.get("confirm")) or confirm.lower() != "y":
         app_ctx.status_msg = "[yellow]Submit cancelled[/yellow]"

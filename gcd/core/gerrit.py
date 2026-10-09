@@ -8,8 +8,7 @@ from .ssh import SSHCommunication
 
 _log = ssh_logger()
 
-GerritSubcommand = Literal["review", "query"]
-GerritReviewSubcommand = Literal["abandon", "code-review", "label", "rebase", "restore", "submit"]
+GerritReviewSubcommand = Literal["abandon", "code-review", "label", "message", "rebase", "restore", "submit"]
 JsonRecord = dict[str, object]
 
 
@@ -27,6 +26,11 @@ def _base_ssh_review_cmd(
 
 def _base_ssh_query_cmd(instance: GerritInstance) -> list[str]:
     return [*_base_ssh_cmd(instance), "query", "--format=json", "--current-patch-set"]
+
+
+def _quote_gerrit_argument(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 class GerritCommunication:
@@ -110,6 +114,9 @@ class GerritCommunication:
 
     def review_rebase(self, instance: GerritInstance, revision: str) -> dict:
         return self._review(instance, "rebase", revision)
+
+    def review_message(self, instance: GerritInstance, revision: str, message: str) -> dict:
+        return self._review(instance, "message", revision, _quote_gerrit_argument(message))
 
     def review_code_review(self, instance: GerritInstance, revision: str, score: int) -> dict:
         return self._review(instance, "code-review", revision, str(score))
