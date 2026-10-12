@@ -57,6 +57,18 @@ Full spec and test cases in `spec/features/028-review-message/`.
 
 ---
 
+## 027 | CLI tracked changes board
+
+Add a read-only `gcd board` subcommand that loads every change tracked by the
+TUI from the local SSH cache and prints compact query-style tables without
+making network requests. `--reload` refreshes and persists current Gerrit data;
+`--json` exposes the same ordered results for scripts. Deleted and disabled
+entries remain included because the command represents the complete tracked set.
+
+Full spec and test cases in `spec/features/027-cli-board/`.
+
+---
+
 ## 026 | Gerrit HTTP connection configuration
 
 Add optional per-instance `http_*` settings for future Gerrit REST API clients:
@@ -175,4 +187,3 @@ This SPIKE supersedes EPIC002 — if CLI is built, EPIC002 becomes unnecessary.
 ## 016 | Design CLI tool
 
 ---
-
