@@ -12,7 +12,26 @@ import pytest
 from helpers import add, idx
 
 from gcd.core.models import ApprovalEntry, ChangeIdentifier
+from gcd.plugins.neo_comment_errors import CommentCatcher
 from gcd.tui.app import _store_result
+
+COMMENT_CATCHER_CONFIG = {
+    "start_gate_message": "gate started",
+    "start_check_message": "check started",
+    "finish_messages": ["finished"],
+    "buildset_link_prefix": "buildset",
+    "job_line_prefix": "job",
+    "success_labels": ["SUCCESS"],
+    "failure_labels": ["FAILURE"],
+}
+
+
+def install_comment_catcher(app, *, initialize: bool) -> CommentCatcher:
+    plugin = CommentCatcher(app, "prod", COMMENT_CATCHER_CONFIG)
+    app.plugin_manager.plugins_per_instance["prod"] = [plugin]
+    if initialize:
+        plugin.on_init()
+    return plugin
 
 # --- adding changes ---
 
@@ -52,6 +71,50 @@ def test_fetch_open_changes_emits_tracked_change(app):
     event, instance, emitted_change = app.plugin_manager.emit.call_args.args
     assert (event, instance) == ("new_change", "prod")
     assert emitted_change is change
+
+
+def test_fetch_open_changes_handles_approvals_after_change_is_available(app):
+    install_comment_catcher(app, initialize=True)
+    app.gerrit_comm.comments_response = [{"message": "gate started https://ci.example/1"}]
+    app.gerrit_comm.open_changes = [
+        {
+            "number": 789,
+            "currentPatchSet": {
+                "revision": "abc123",
+                "number": 1,
+                "approvals": [{"type": "Verified", "value": "+1", "by": {"name": "CI"}}],
+            },
+        }
+    ]
+    instance = app.config.get_instance_by_name("prod")
+    assert instance is not None
+
+    assert app._fetch_open_changes_from_instance(instance) == 1
+
+    change = app.changes.by_id(ChangeIdentifier(789, "prod"))
+    assert change is not None
+    assert change.comments == ["Gate started at https://ci.example/1"]
+
+
+def test_run_initializes_plugins_before_querying_changes(app, monkeypatch):
+    install_comment_catcher(app, initialize=False)
+    change = add(app, 123)
+    app.gerrit_comm.query_response = {
+        "number": 123,
+        "currentPatchSet": {
+            "revision": "abc123",
+            "number": 1,
+            "approvals": [{"type": "Verified", "value": "+1", "by": {"name": "CI"}}],
+        },
+    }
+    app.gerrit_comm.comments_response = [{"message": "gate started https://ci.example/1"}]
+    app.running = False
+    monkeypatch.setattr("gcd.tui.app.Thread", MagicMock())
+    monkeypatch.setattr("gcd.tui.app.Live", MagicMock())
+
+    app.run()
+
+    assert change.comments == ["Gate started at https://ci.example/1"]
 
 
 @pytest.mark.parametrize("number", [None, "789", True, 0, -1])

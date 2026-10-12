@@ -60,7 +60,7 @@ class CommentCatcher(BasePlugin):
         # Walk newest -> oldest and act on the first CI comment we recognise.
         for comment in reversed(comments):
             msg = comment.get("message")
-            if not msg:
+            if not isinstance(msg, str) or not msg:
                 continue
 
             self.log.debug(msg)

@@ -48,6 +48,7 @@ class FakeGerrit:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple]] = []
         self.query_response: dict = {}
+        self.comments_response: list[dict] = []
         self.review_response: dict = {"success": True}
         self.open_changes: list[dict] = []
 
@@ -69,7 +70,7 @@ class FakeGerrit:
 
     def query_change_comments(self, instance, change_id):
         self._record("query_change_comments", instance, change_id)
-        return []
+        return list(self.comments_response)
 
     def query_open_changes(self, instance):
         self._record("query_open_changes", instance)

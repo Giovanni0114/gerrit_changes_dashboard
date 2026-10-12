@@ -726,8 +726,8 @@ class App:
                 continue
 
             ch = TrackedChange(number=number, instance=instance.name)
-            _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
+            _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.plugin_manager.emit("new_change", ch.instance, ch)
             numbers_in_changes.add(number)
             added += 1
@@ -896,9 +896,9 @@ class App:
 
     def run(self) -> None:
         """Run initial queries, start threads, enter main loop."""
+        self.plugin_manager.init()
         self.query_active_changes()
         self.query_disabled_once()
-        self.plugin_manager.init()
 
         reader_thread = Thread(target=self._key_reader, daemon=True)
         reader_thread.start()
