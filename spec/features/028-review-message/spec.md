@@ -32,11 +32,11 @@ ssh -x -p <port> <host> gerrit review <current-revision> --message <message>
 ```
 
 OpenSSH joins remote command arguments into one command string before sending
-it, and Gerrit parses that string again. The message is therefore wrapped in
-double quotes for Gerrit's parser, with embedded double quotes and backslashes
-escaped. This preserves spaces and option-looking text such as `--submit`
-without allowing it to become another Gerrit argument. The command is still
-executed without a local shell.
+it, which the remote shell parses before invoking Gerrit. The message is
+therefore quoted with POSIX shell-safe quoting (`shlex.quote`). This preserves
+spaces and option-looking text such as `--submit` while preventing variable or
+command expansion and keeping the complete message as one Gerrit argument. The
+command is still executed without a local shell.
 
 ## Validation And Results
 
