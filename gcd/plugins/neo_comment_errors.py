@@ -49,12 +49,11 @@ class CommentCatcher(BasePlugin):
         self.log.info(f"on_activate: {change_id}")
 
         comments = self.ctx.fetch_comments_from_change(change)
-        if not comments:
-            self.log.error(f"on_activate: could not fetch comments for {change_id}: {comments}")
-            return
-
         if isinstance(comments, dict):
             self.log.error(f"on_activate: could not fetch comments for {change_id}: {comments['error']}")
+            return
+
+        if not comments:
             return
 
         # Walk newest -> oldest and act on the first CI comment we recognise.

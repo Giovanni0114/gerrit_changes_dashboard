@@ -537,7 +537,7 @@ class App:
                 per_projects = self.changes.get_all_per_project()
                 index_global = 1
 
-                for project in sorted(per_projects):
+                for project in sorted(per_projects, key=lambda project: project or ""):
                     changes = per_projects[project]
                     if not changes:
                         continue

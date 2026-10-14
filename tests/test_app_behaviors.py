@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from helpers import add, idx
 
+from gcd.core.config import Layout
 from gcd.core.models import ApprovalEntry, ChangeIdentifier
 from gcd.plugins.neo_comment_errors import CommentCatcher
 from gcd.tui.app import _store_result
@@ -32,6 +33,7 @@ def install_comment_catcher(app, *, initialize: bool) -> CommentCatcher:
     if initialize:
         plugin.on_init()
     return plugin
+
 
 # --- adding changes ---
 
@@ -71,6 +73,17 @@ def test_fetch_open_changes_emits_tracked_change(app):
     event, instance, emitted_change = app.plugin_manager.emit.call_args.args
     assert (event, instance) == ("new_change", "prod")
     assert emitted_change is change
+
+
+def test_projects_layout_handles_changes_without_project(app):
+    app.config.layout = Layout.PROJECTS
+    unknown_project = add(app, 789)
+    known_project = add(app, 456, project="dashboard")
+
+    tables, index_map = app.make_tables()
+
+    assert len(tables) == 2
+    assert index_map == [unknown_project.id, known_project.id]
 
 
 def test_fetch_open_changes_handles_approvals_after_change_is_available(app):

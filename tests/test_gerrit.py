@@ -1,4 +1,6 @@
+import os
 import shlex
+import subprocess
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,9 +30,24 @@ def test_review_message_preserves_complete_message_as_one_ssh_argument():
         "review",
         "deadbeef",
         "--message",
-        '"Ready to merge; don\'t expand $HOME or \\"quotes\\" \\\\ paths --submit"',
+        shlex.quote(message),
     ]
-    assert shlex.split(" ".join(command[5:])) == ["gerrit", "review", "deadbeef", "--message", message]
+    remote_command = " ".join(command[5:])
+    result = subprocess.run(
+        [
+            "sh",
+            "-c",
+            'gerrit() { for argument do printf "<%s>" "$argument"; done; }; eval "$1"',
+            "sh",
+            remote_command,
+        ],
+        check=True,
+        capture_output=True,
+        env={**os.environ, "HOME": "/must-not-expand"},
+        text=True,
+    )
+
+    assert result.stdout == f"<review><deadbeef><--message><{message}>"
 
 
 @pytest.mark.parametrize(

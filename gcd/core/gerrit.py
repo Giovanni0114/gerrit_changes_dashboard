@@ -1,4 +1,5 @@
 import json
+import shlex
 from typing import Literal
 
 from gcd.core.logs import ssh_logger
@@ -29,8 +30,7 @@ def _base_ssh_query_cmd(instance: GerritInstance) -> list[str]:
 
 
 def _quote_gerrit_argument(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+    return shlex.quote(value)
 
 
 class GerritCommunication:

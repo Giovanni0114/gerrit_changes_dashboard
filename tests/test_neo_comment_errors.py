@@ -1,3 +1,5 @@
+import logging
+
 from gcd.core.models import ChangeIdentifier, TrackedChange
 from gcd.plugins.neo_comment_errors import CommentCatcher
 
@@ -30,3 +32,26 @@ def test_comment_catcher_skips_non_string_comment_messages() -> None:
     plugin.on_activate(ChangeIdentifier(123, "prod"), change)
 
     assert change.comments == []
+
+
+def test_comment_catcher_ignores_empty_comment_list(caplog) -> None:
+    plugin = CommentCatcher(
+        CommentsContext({"comments": []}),
+        "prod",
+        {
+            "start_gate_message": "gate started",
+            "start_check_message": "check started",
+            "finish_messages": ["finished"],
+            "buildset_link_prefix": "buildset",
+            "job_line_prefix": "job",
+            "success_labels": ["SUCCESS"],
+            "failure_labels": ["FAILURE"],
+        },
+    )
+    plugin.on_init()
+    change = TrackedChange(number=123, instance="prod")
+    caplog.set_level(logging.ERROR, logger="gcd.plugin")
+
+    plugin.on_activate(ChangeIdentifier(123, "prod"), change)
+
+    assert "could not fetch comments" not in caplog.text
