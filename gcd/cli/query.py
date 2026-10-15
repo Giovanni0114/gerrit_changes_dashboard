@@ -14,6 +14,9 @@ from gcd.core.gerrit import GerritCommunication
 from gcd.core.models import GerritInstance
 
 _BARE_WORD = re.compile(r"^[A-Za-z0-9@._/-]+$")
+_AGE = re.compile(
+    r"[0-9]+(?:s|sec|second|seconds|m|min|minute|minutes|h|hr|hour|hours|d|day|days|w|week|weeks|mon|month|months|y|year|years)"
+)
 
 PROJECT_WIDTH = 25
 
@@ -29,6 +32,13 @@ def _quote(value: str) -> str:
     if _BARE_WORD.match(value):
         return value
     return f'"{value}"'
+
+
+def _validate_age(value: str) -> str:
+    """Validate Gerrit's age duration grammar."""
+    if not _AGE.fullmatch(value):
+        raise ValueError(f"Invalid age duration: {value}")
+    return value
 
 
 def build_query(args: Mapping, instance_email: str | None) -> list[str]:
@@ -50,6 +60,12 @@ def build_query(args: Mapping, instance_email: str | None) -> list[str]:
 
     if args.get("project"):
         operators.append(f"project:{_quote(args['project'])}")
+
+    if args.get("hashtag"):
+        operators.append(f"hashtag:{_quote(args['hashtag'])}")
+
+    if args.get("age") is not None:
+        operators.append(f"-age:{_validate_age(args['age'])}")
 
     if args.get("mergedafter"):
         operators.append(f"mergedafter:{convert_date(args['mergedafter'])}")

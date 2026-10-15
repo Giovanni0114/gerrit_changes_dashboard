@@ -32,7 +32,12 @@ select = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "mypy>=0.971", "ruff>=0.0.241"]
+dev = [
+    "pytest>=8",
+    "mypy>=0.971",
+    "ruff>=0.0.241",
+    "ty>=0.0.87",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

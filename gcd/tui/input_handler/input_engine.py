@@ -23,6 +23,7 @@ from .context_actions import (
     refresh,
     review_abandon_action,
     review_code_review_action,
+    review_message_action,
     review_rebase_action,
     review_restore_action,
     review_submit_action,
@@ -65,6 +66,7 @@ def input_idx_factory(add_special_chars: set[str] | None = None) -> InputField:
 
 
 TEXT_FIELD = InputField("text")
+MESSAGE_FIELD = InputField("message")
 COMMENT_IDX_FIELD = InputField("comment_idx", frozenset({"a", "t"}))
 CONFIRM_FIELD = InputField("confirm", frozenset({"y", "n"}))
 SCORE_FIELD = InputField(
@@ -104,6 +106,7 @@ REVIEW_ACTIONS: dict[str, LeafAction] = {
     "b": LeafAction(review_rebase_action, [input_idx_factory()], "rebase"),
     "R": LeafAction(review_restore_action, [input_idx_factory()], "restore"),
     "c": LeafAction(review_code_review_action, [input_idx_factory(), SCORE_FIELD], "code-review"),
+    "p": LeafAction(review_message_action, [input_idx_factory(), MESSAGE_FIELD], "publish message"),
     "s": LeafAction(review_submit_action, [input_idx_factory(), CONFIRM_FIELD], "submit"),
     "m": LeafAction(set_automerge, [input_idx_factory()], "automerge"),
 }
@@ -322,6 +325,9 @@ class InputHandler:
             if self.tags_rotation:
                 self.input = self.tags_rotation[0]
 
+            return False
+
+        if key == "<tab>" and self.current_field.name == MESSAGE_FIELD.name:
             return False
 
         if key in self.current_field.special_chars:

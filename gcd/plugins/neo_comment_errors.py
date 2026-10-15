@@ -1,5 +1,7 @@
 from gcd.core.models import ApprovalEntry, BasePlugin, ChangeIdentifier, TrackedChange
 
+TRIGGERING_APPROVAL_LABEL = "Verified"
+
 KEY_START_GATE = "start_gate_message"
 KEY_START_CHECK = "start_check_message"
 KEY_FINISH_MESSAGES = "finish_messages"
@@ -43,23 +45,26 @@ class CommentCatcher(BasePlugin):
     def on_exit(self) -> None:
         pass
 
-    def on_activate(self, change_id: ChangeIdentifier, ch: TrackedChange) -> None:
+    def on_activate(self, change_id: ChangeIdentifier, change: TrackedChange) -> None:
         self.log.info(f"on_activate: {change_id}")
 
-        comments = self.ctx.fetch_comments_from_change(ch)
-        if not isinstance(comments, list):
-            self.log.error(f"on_activate: could not fetch comments for {change_id}: {comments}")
+        comments = self.ctx.fetch_comments_from_change(change)
+        if isinstance(comments, dict):
+            self.log.error(f"on_activate: could not fetch comments for {change_id}: {comments['error']}")
+            return
+
+        if not comments:
             return
 
         # Walk newest -> oldest and act on the first CI comment we recognise.
         for comment in reversed(comments):
-            msg = comment.get("message", "") if isinstance(comment, dict) else ""
-            if not msg:
+            msg = comment.get("message")
+            if not isinstance(msg, str) or not msg:
                 continue
 
             self.log.debug(msg)
 
-            if self._handle_ci_comment(ch, msg):
+            if self._handle_ci_comment(change, msg):
                 return
 
     def _handle_ci_comment(self, ch: TrackedChange, msg: str) -> bool:
@@ -105,7 +110,14 @@ class CommentCatcher(BasePlugin):
         return True
 
     def on_new_approval(self, change_id: ChangeIdentifier, new_approval: ApprovalEntry) -> None:
-        pass
+        if new_approval.label == TRIGGERING_APPROVAL_LABEL:
+            self.log.info(f"on_new_approval {change_id}, new approvals: {new_approval}")
+
+            if not (ch := self.ctx.changes.by_id(change_id)):
+                self.log.error(f"on_new_approval: cannot retrieve change by id {change_id}")
+                return
+
+            self.on_activate(change_id, ch)
 
 
 plugin_class = CommentCatcher

@@ -8,10 +8,32 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from helpers import add, idx
 
+from gcd.core.config import Layout
 from gcd.core.models import ApprovalEntry, ChangeIdentifier
+from gcd.plugins.neo_comment_errors import CommentCatcher
 from gcd.tui.app import _store_result
+
+COMMENT_CATCHER_CONFIG = {
+    "start_gate_message": "gate started",
+    "start_check_message": "check started",
+    "finish_messages": ["finished"],
+    "buildset_link_prefix": "buildset",
+    "job_line_prefix": "job",
+    "success_labels": ["SUCCESS"],
+    "failure_labels": ["FAILURE"],
+}
+
+
+def install_comment_catcher(app, *, initialize: bool) -> CommentCatcher:
+    plugin = CommentCatcher(app, "prod", COMMENT_CATCHER_CONFIG)
+    app.plugin_manager.plugins_per_instance["prod"] = [plugin]
+    if initialize:
+        plugin.on_init()
+    return plugin
+
 
 # --- adding changes ---
 
@@ -24,6 +46,100 @@ def test_add_change_appends_to_store(app):
     assert app.changes.count() == before + 1
     assert app.changes.by_id(ChangeIdentifier(456, "prod")) is not None
     assert app.status_msg  # a status message was set
+
+
+def test_add_change_emits_tracked_change(app):
+    app.plugin_manager.emit = MagicMock()
+
+    app.add_change(456, "prod")
+
+    change = app.changes.by_id(ChangeIdentifier(456, "prod"))
+    assert change is not None
+    event, instance, emitted_change = app.plugin_manager.emit.call_args.args
+    assert (event, instance) == ("new_change", "prod")
+    assert emitted_change is change
+
+
+def test_fetch_open_changes_emits_tracked_change(app):
+    app.plugin_manager.emit = MagicMock()
+    app.gerrit_comm.open_changes = [{"number": 789, "currentPatchSet": {}}]
+    instance = app.config.get_instance_by_name("prod")
+    assert instance is not None
+
+    assert app._fetch_open_changes_from_instance(instance) == 1
+
+    change = app.changes.by_id(ChangeIdentifier(789, "prod"))
+    assert change is not None
+    event, instance, emitted_change = app.plugin_manager.emit.call_args.args
+    assert (event, instance) == ("new_change", "prod")
+    assert emitted_change is change
+
+
+def test_projects_layout_handles_changes_without_project(app):
+    app.config.layout = Layout.PROJECTS
+    unknown_project = add(app, 789)
+    known_project = add(app, 456, project="dashboard")
+
+    tables, index_map = app.make_tables()
+
+    assert len(tables) == 2
+    assert index_map == [unknown_project.id, known_project.id]
+
+
+def test_fetch_open_changes_handles_approvals_after_change_is_available(app):
+    install_comment_catcher(app, initialize=True)
+    app.gerrit_comm.comments_response = [{"message": "gate started https://ci.example/1"}]
+    app.gerrit_comm.open_changes = [
+        {
+            "number": 789,
+            "currentPatchSet": {
+                "revision": "abc123",
+                "number": 1,
+                "approvals": [{"type": "Verified", "value": "+1", "by": {"name": "CI"}}],
+            },
+        }
+    ]
+    instance = app.config.get_instance_by_name("prod")
+    assert instance is not None
+
+    assert app._fetch_open_changes_from_instance(instance) == 1
+
+    change = app.changes.by_id(ChangeIdentifier(789, "prod"))
+    assert change is not None
+    assert change.comments == ["Gate started at https://ci.example/1"]
+
+
+def test_run_initializes_plugins_before_querying_changes(app, monkeypatch):
+    install_comment_catcher(app, initialize=False)
+    change = add(app, 123)
+    app.gerrit_comm.query_response = {
+        "number": 123,
+        "currentPatchSet": {
+            "revision": "abc123",
+            "number": 1,
+            "approvals": [{"type": "Verified", "value": "+1", "by": {"name": "CI"}}],
+        },
+    }
+    app.gerrit_comm.comments_response = [{"message": "gate started https://ci.example/1"}]
+    app.running = False
+    monkeypatch.setattr("gcd.tui.app.Thread", MagicMock())
+    monkeypatch.setattr("gcd.tui.app.Live", MagicMock())
+
+    app.run()
+
+    assert change.comments == ["Gate started at https://ci.example/1"]
+
+
+@pytest.mark.parametrize("number", [None, "789", True, 0, -1])
+def test_fetch_open_changes_ignores_invalid_change_numbers(app, number):
+    app.plugin_manager.emit = MagicMock()
+    app.gerrit_comm.open_changes = [{"number": number, "currentPatchSet": {}}]
+    instance = app.config.get_instance_by_name("prod")
+    assert instance is not None
+
+    assert app._fetch_open_changes_from_instance(instance) == 0
+    assert app.changes.count() == 0
+    app.plugin_manager.emit.assert_not_called()
 
 
 # --- toggles ---
@@ -78,6 +194,15 @@ def test_delete_comment_all_tags_removes_tags(app):
     app.delete_comment_all_tags(idx(1))
 
     assert ch.comments == ["note", "follow-up"]
+
+
+def test_fetch_comments_returns_error_for_missing_instance(app):
+    ch = add(app, 1, instance="missing")
+
+    result = app.fetch_comments_from_change(ch)
+
+    assert result == {"error": "Instance not found"}
+    assert "cannot find instance 'missing'" in app.status_msg
 
 
 # --- delete / restore lifecycle ---
@@ -156,6 +281,113 @@ def test_review_failure_surfaces_error_and_no_refresh(app):
 
     assert "failed" in app.status_msg
     app._start_refresh.assert_not_called()
+
+
+def test_review_message_publishes_without_starting_refresh(app):
+    app._start_refresh = MagicMock()
+    add(app, 101, current_revision="deadbeef")
+
+    app.review_message(idx(1), "Looks good")
+
+    assert ("review_message", (app.config.default_instance, "deadbeef", "Looks good")) in app.gerrit_comm.calls
+    assert "1 change" in app.status_msg
+    assert "green" in app.status_msg
+    app._start_refresh.assert_not_called()
+
+
+def test_review_message_publishes_to_multiple_instances(app):
+    add(app, 101, current_revision="prod-revision")
+    add(app, 202, instance="staging", current_revision="staging-revision")
+
+    app.review_message(idx(1, 2), "Looks good")
+
+    assert app.gerrit_comm.calls == [
+        ("review_message", (app.config.default_instance, "prod-revision", "Looks good")),
+        ("review_message", (app.config.instances[1], "staging-revision", "Looks good")),
+    ]
+    assert "2 changes" in app.status_msg
+    assert "green" in app.status_msg
+
+
+@pytest.mark.parametrize("message", ["", "   "])
+def test_review_message_rejects_empty_or_whitespace_only_text(app, message):
+    add(app, 101, current_revision="deadbeef")
+
+    app.review_message(idx(1), message)
+
+    assert not app.gerrit_comm.called("review_message")
+    assert "empty" in app.status_msg.lower()
+    assert "red" in app.status_msg
+
+
+def test_review_message_reports_missing_revision_without_blocking_valid_change(app):
+    add(app, 101)
+    add(app, 202, current_revision="cafebabe")
+
+    app.review_message(idx(1, 2), "Please take another look")
+
+    assert app.gerrit_comm.calls == [
+        ("review_message", (app.config.default_instance, "cafebabe", "Please take another look"))
+    ]
+    assert "1 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "yellow" in app.status_msg
+
+
+def test_review_message_reports_gerrit_failure_without_blocking_later_change(app):
+    add(app, 101, current_revision="bad")
+    add(app, 202, current_revision="good")
+    responses = iter([{"error": "permission denied"}, {"success": True}])
+
+    def review_message(instance, revision, message):
+        app.gerrit_comm._record("review_message", instance, revision, message)
+        return next(responses)
+
+    app.gerrit_comm.review_message = review_message
+
+    app.review_message(idx(1, 2), "Please take another look")
+
+    assert [args[1] for name, args in app.gerrit_comm.calls if name == "review_message"] == ["bad", "good"]
+    assert "1 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "permission denied" in app.status_msg
+    assert "yellow" in app.status_msg
+
+
+def test_review_message_reports_unknown_instance_without_blocking_valid_change(app):
+    add(app, 101, instance="retired", current_revision="unknown")
+    add(app, 202, current_revision="good")
+
+    app.review_message(idx(1, 2), "Please take another look")
+
+    assert app.gerrit_comm.calls == [
+        ("review_message", (app.config.default_instance, "good", "Please take another look"))
+    ]
+    assert "1 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "retired" in app.status_msg
+    assert "yellow" in app.status_msg
+
+
+def test_review_message_preserves_no_matching_changes_error(app):
+    app.review_message(idx(9), "Looks good")
+
+    assert not app.gerrit_comm.called("review_message")
+    assert "No matching changes" in app.status_msg
+    assert "red" in app.status_msg
+
+
+def test_review_message_reports_every_failure_when_nothing_is_published(app):
+    add(app, 101)
+    add(app, 202, instance="retired", current_revision="unknown")
+
+    app.review_message(idx(1, 2), "Looks good")
+
+    assert not app.gerrit_comm.called("review_message")
+    assert "0 of 2" in app.status_msg
+    assert "#101" in app.status_msg
+    assert "#202" in app.status_msg
+    assert "red" in app.status_msg
 
 
 # --- gerrit JSON -> model mapping ---

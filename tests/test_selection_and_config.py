@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from gcd.core.config import DEFAULT_INTERVAL, DEFAULT_REFRESH_RATE, AppConfig, Layout
+from gcd.core.config import (
+    DEFAULT_CACHE_FILENAME,
+    DEFAULT_CHANGES_FILENAME,
+    DEFAULT_INTERVAL,
+    DEFAULT_LOG_DIRNAME,
+    DEFAULT_REFRESH_RATE,
+    AppConfig,
+    Layout,
+)
 from gcd.tui.input_handler.utils import parse_idx_notation
 
 # --- parse_idx_notation ---
@@ -80,6 +88,72 @@ def test_applies_defaults(tmp_path):
     assert config.ui_refresh_rate == DEFAULT_REFRESH_RATE
 
 
+@pytest.mark.parametrize(
+    ("key", "value", "expected"),
+    [
+        ("interval", '"7"', 7),
+        ("interval", "8", 8),
+        ("interval", "9.9", 9),
+        ("interval", "true", 1),
+        ("ui_refresh_rate", '"7.5"', 7.5),
+        ("ui_refresh_rate", "8", 8.0),
+        ("ui_refresh_rate", "9.5", 9.5),
+        ("ui_refresh_rate", "true", 1.0),
+    ],
+)
+def test_numeric_config_fields_accept_values_convertible_by_python(tmp_path, key, value, expected):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[config]\n"
+        "default_port = 22\n"
+        'default_email = "t@e.com"\n'
+        f"{key} = {value}\n"
+        "\n[instance.prod]\n"
+        'host = "gerrit.example.com"\n',
+        encoding="utf-8",
+    )
+
+    config = AppConfig(cfg)
+
+    assert getattr(config, key) == expected
+
+
+def test_hide_tags_preserves_mixed_list_values(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[config]\n"
+        "default_port = 22\n"
+        'default_email = "t@e.com"\n'
+        'hide_tags = ["#HIDE", 1, 2.5, true]\n'
+        "\n[instance.prod]\n"
+        'host = "gerrit.example.com"\n',
+        encoding="utf-8",
+    )
+
+    assert AppConfig(cfg).hide_tags == ["#HIDE", 1, 2.5, True]
+
+
+def test_empty_path_config_values_use_defaults(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[config]\n"
+        "default_port = 22\n"
+        'default_email = "t@e.com"\n'
+        'changes_file = ""\n'
+        'cache_file = ""\n'
+        'log_dir = ""\n'
+        "\n[instance.prod]\n"
+        'host = "gerrit.example.com"\n',
+        encoding="utf-8",
+    )
+
+    config = AppConfig(cfg)
+
+    assert config.changes_path == (tmp_path / DEFAULT_CHANGES_FILENAME).resolve()
+    assert config.cache_path == (tmp_path / DEFAULT_CACHE_FILENAME).resolve()
+    assert config.log_path == (tmp_path / DEFAULT_LOG_DIRNAME).resolve()
+
+
 def test_next_layout_cycles(config):
     # TC-309
     start = config.layout
@@ -90,3 +164,31 @@ def test_next_layout_cycles(config):
     # cycled through every layout and wrapped back to the start
     assert set(seen) == set(Layout)
     assert seen[-1] == start
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("interval", "[]"),
+        ("ui_refresh_rate", "[]"),
+        ("changes_file", "[]"),
+        ("cache_file", "[]"),
+        ("log_dir", "[]"),
+        ("hide_tags", '"#HIDE"'),
+        ("editor", "[]"),
+    ],
+)
+def test_config_fields_reject_values_of_the_wrong_type(tmp_path, key, value):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        "[config]\n"
+        "default_port = 22\n"
+        'default_email = "t@e.com"\n'
+        f"{key} = {value}\n"
+        "\n[instance.prod]\n"
+        'host = "gerrit.example.com"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=key):
+        AppConfig(cfg)

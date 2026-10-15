@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
+from typing import cast
 
 Parser = Callable[[str, object, Path], object]
 
@@ -11,6 +12,8 @@ def _int_parser(default: int, *, minimum: int | None = None) -> Parser:
     def parse(name: str, raw: object, base_dir: Path) -> int:
         if raw is None:
             return default
+        if not isinstance(raw, (str, int, float)):
+            raise ValueError(f"Invalid value for '{name}': expected an integer, got {raw!r}")
         try:
             value = int(raw)
         except (TypeError, ValueError) as ex:
@@ -26,6 +29,8 @@ def _float_parser(default: float, *, minimum: float | None = None) -> Parser:
     def parse(name: str, raw: object, base_dir: Path) -> float:
         if raw is None:
             return default
+        if not isinstance(raw, (str, int, float)):
+            raise ValueError(f"Invalid value for '{name}': expected a number, got {raw!r}")
         try:
             value = float(raw)
         except (TypeError, ValueError) as ex:
@@ -61,21 +66,35 @@ def _enum_parser(enum_cls: type[Enum], default: Enum) -> Parser:
 
 def _str_parser(default: str | None = None) -> Parser:
     def parse(name: str, raw: object, base_dir: Path) -> str | None:
-        return raw if raw is not None else default
+        if raw is None:
+            return default
+        if not isinstance(raw, str):
+            raise ValueError(f"Invalid value for '{name}': expected a string, got {raw!r}")
+        return raw
 
     return parse
 
 
-def _list_parser(default: list | None = None) -> Parser:
-    def parse(name: str, raw: object, base_dir: Path) -> str | None:
-        return raw if raw is not None else default
+def _list_parser(default: list[object] | None = None) -> Parser:
+    def parse(name: str, raw: object, base_dir: Path) -> list[object] | None:
+        if raw is None:
+            return default
+        if not isinstance(raw, list):
+            raise ValueError(f"Invalid value for '{name}': expected a list, got {raw!r}")
+        return cast(list[object], raw)
 
     return parse
 
 
 def _file_path_parser(default: str) -> Parser:
     def parse(name: str, raw: object, base_dir: Path) -> Path:
-        path = (base_dir / (raw or default)).resolve()
+        if raw is None:
+            value = default
+        elif isinstance(raw, str):
+            value = raw or default
+        else:
+            raise ValueError(f"Invalid value for '{name}': expected a path string, got {raw!r}")
+        path = (base_dir / value).resolve()
         parent = path.parent
         if not parent.exists():
             raise ValueError(f"Directory for '{name}' does not exist: {parent}")
@@ -88,7 +107,13 @@ def _file_path_parser(default: str) -> Parser:
 
 def _dir_path_parser(default: str) -> Parser:
     def parse(name: str, raw: object, base_dir: Path) -> Path:
-        path = (base_dir / (raw or default)).resolve()
+        if raw is None:
+            value = default
+        elif isinstance(raw, str):
+            value = raw or default
+        else:
+            raise ValueError(f"Invalid value for '{name}': expected a path string, got {raw!r}")
+        path = (base_dir / value).resolve()
         if path.exists() and not path.is_dir():
             raise ValueError(f"'{name}' exists but is not a directory: {path}")
         return path

@@ -77,6 +77,9 @@ class PluginManager:
             self._safe_call(plugin, "on_exit")
 
     def _safe_call(self, plugin: BasePlugin, method: str, args=None, kwargs=None) -> None:
+        if not plugin.enabled and method not in {"on_init", "on_exit"}:
+            return
+
         try:
             if fn := getattr(plugin, method, None):
                 fn(*(args or []), **(kwargs or {}))

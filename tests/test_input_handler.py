@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from helpers import idx
 
-from gcd.core.models import AppContext
+from gcd.core.models import AppContext, TrackedChange
 
 
 def _send(handler, *keys):
@@ -42,6 +42,48 @@ def test_comment_sequence_dispatches_add_comment(input_handler, spy_ctx):
     _send(input_handler, " ", "c", "a", "1", "<enter>", "h", "i", "<enter>")
 
     spy_ctx.add_comment.assert_called_once_with(idx(1), "hi")
+
+
+def test_publish_message_sequence_dispatches_selected_changes_and_message(input_handler, spy_ctx):
+    _send(
+        input_handler,
+        " ",
+        "r",
+        "p",
+        "1",
+        ",",
+        "3",
+        "<enter>",
+        "L",
+        "o",
+        "o",
+        "k",
+        "s",
+        " ",
+        "g",
+        "o",
+        "o",
+        "d",
+        "<enter>",
+    )
+
+    spy_ctx.review_message.assert_called_once_with(idx(1, 3), "Looks good")
+
+
+def test_publish_message_tab_does_not_complete_local_comment_tags(input_handler, spy_ctx):
+    spy_ctx.changes.append(TrackedChange(1, "prod", comments=["#urgent"]))
+
+    _send(input_handler, " ", "r", "p", "1", "<enter>", "#", "u", "<tab>", "<enter>")
+
+    spy_ctx.review_message.assert_called_once_with(idx(1), "#u")
+
+
+def test_esc_cancels_while_entering_review_message(input_handler, spy_ctx):
+    _send(input_handler, " ", "r", "p", "1", "<enter>", "n", "o", "<esc>")
+
+    spy_ctx.review_message.assert_not_called()
+    assert input_handler.sequence == []
+    assert input_handler.current_action is None
 
 
 def test_wildcard_index_produces_wildcard_index(input_handler, spy_ctx):

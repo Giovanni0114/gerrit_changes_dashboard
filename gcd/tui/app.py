@@ -17,7 +17,7 @@ from gcd.core.changes import Changes
 from gcd.core.config import AppConfig, Layout
 from gcd.core.gerrit import GerritCommunication
 from gcd.core.logs import app_logger
-from gcd.core.models import ApprovalEntry, ChangeIdentifier, GerritInstance, Index, TrackedChange
+from gcd.core.models import ApprovalEntry, ChangeIdentifier, CommentQueryResult, GerritInstance, Index, TrackedChange
 from gcd.core.plugin_manager import PluginManager
 from gcd.core.utils import Arrow, NoEcho
 from gcd.tui.display import (
@@ -67,6 +67,8 @@ def _store_result(ch: TrackedChange | None, data: dict, cache: SshCache, plugin_
 
     ch.subject = data.get("subject")
     ch.project = data.get("project")
+    owner = data.get("owner")
+    ch.owner = owner.copy() if isinstance(owner, dict) else None
     ch.url = data.get("url")
 
     patch_set = data.get("currentPatchSet", {})
@@ -257,6 +259,56 @@ class App:
             _log.info("code-review set change=%s instance=%s score=%d", ch.number, ch.instance, score)
             self._start_refresh()
 
+    def review_message(self, rows: Index, message: str) -> None:
+        if not message.strip():
+            self.status_msg = "[red]Cannot publish an empty message[/red]"
+            _log.warning("review message skipped: empty message")
+            return
+
+        changes = self._resolve_index(rows)
+        if not changes:
+            return
+
+        published = 0
+        failures: list[str] = []
+
+        for ch in changes:
+            if ch.current_revision is None:
+                failures.append(f"#{ch.number}: no current revision known")
+                _log.warning("review message skipped change=%s: no current revision", ch.number)
+                continue
+
+            instance = self.config.get_instance_by_name(ch.instance)
+            if instance is None:
+                failures.append(f"#{ch.number}: unknown instance '{ch.instance}'")
+                _log.warning("review message skipped change=%s: unknown instance=%s", ch.number, ch.instance)
+                continue
+
+            result = self.gerrit_comm.review_message(instance, ch.current_revision, message)
+            if "error" in result:
+                failures.append(f"#{ch.number}: {result['error']}")
+                _log.warning(
+                    "review message failed change=%s instance=%s error=%s",
+                    ch.number,
+                    ch.instance,
+                    result["error"],
+                )
+                continue
+
+            published += 1
+            _log.info("review message published change=%s instance=%s", ch.number, ch.instance)
+
+        if failures:
+            color = "yellow" if published else "red"
+            details = "; ".join(failures)
+            self.status_msg = (
+                f"[{color}]Message published to {published} of {len(changes)} changes; failed: {details}[/{color}]"
+            )
+            return
+
+        noun = "change" if published == 1 else "changes"
+        self.status_msg = f"[green]Message published to {published} {noun}[/green]"
+
     def review_abandon(self, rows: Index) -> None:
         for ch in self._resolve_index(rows):
             self._review_abandon(ch)
@@ -355,11 +407,11 @@ class App:
 
     # --- gerrit fetch additional info ---
 
-    def fetch_comments_from_change(self, ch: TrackedChange) -> list[dict]:
+    def fetch_comments_from_change(self, ch: TrackedChange) -> CommentQueryResult:
         instance = self.config.get_instance_by_name(ch.instance)
         if instance is None:
             self.status_msg = f"[red]cannot find instance '{ch.instance}' for change {ch.number}[/red]"
-            return
+            return {"error": "Instance not found"}
 
         return self.gerrit_comm.query_change_comments(instance, str(ch.number))
 
@@ -485,7 +537,7 @@ class App:
                 per_projects = self.changes.get_all_per_project()
                 index_global = 1
 
-                for project in sorted(per_projects):
+                for project in sorted(per_projects, key=lambda project: project or ""):
                     changes = per_projects[project]
                     if not changes:
                         continue
@@ -613,7 +665,7 @@ class App:
     def add_change(self, number: int, instance: str) -> None:
         new_change = TrackedChange(number=number, instance=instance)
         self.changes.append(new_change)
-        self.plugin_manager.emit("new_change", new_change.instance, new_change.id, new_change)
+        self.plugin_manager.emit("new_change", new_change.instance, new_change)
         self.status_msg = f"[green]Added {number} @ {instance}[/green]"
         _log.info("change added number=%d instance=%s", number, instance)
 
@@ -669,13 +721,16 @@ class App:
 
             number = change_data.get("number")
 
-            if number is None or number in numbers_in_changes:
+            if not isinstance(number, int) or isinstance(number, bool) or number <= 0:
+                continue
+
+            if number in numbers_in_changes:
                 continue
 
             ch = TrackedChange(number=number, instance=instance.name)
-            _store_result(ch, change_data, self.cache, self.plugin_manager)
             self.changes.append(ch)
-            self.plugin_manager.emit("new_change", ch.instance, ch.id)
+            _store_result(ch, change_data, self.cache, self.plugin_manager)
+            self.plugin_manager.emit("new_change", ch.instance, ch)
             numbers_in_changes.add(number)
             added += 1
 
@@ -843,9 +898,9 @@ class App:
 
     def run(self) -> None:
         """Run initial queries, start threads, enter main loop."""
+        self.plugin_manager.init()
         self.query_active_changes()
         self.query_disabled_once()
-        self.plugin_manager.init()
 
         reader_thread = Thread(target=self._key_reader, daemon=True)
         reader_thread.start()
@@ -921,6 +976,7 @@ def main() -> None:
     import argparse
     import sys
 
+    from gcd.cli.board import run as board_run
     from gcd.cli.query import run as query_run
     from gcd.core.config import generate_example_config
     from gcd.core.logs import setup_logging
@@ -957,9 +1013,19 @@ def main() -> None:
     query_parser.add_argument("--open", action="store_true", help="is:open")
     query_parser.add_argument("--submittable", action="store_true", help="is:submittable")
     query_parser.add_argument("--project", help="project:PATH")
+    query_parser.add_argument("--hashtag", help="hashtag:NAME")
+    query_parser.add_argument("--age", help="age:DURATION")
     query_parser.add_argument("--mergedafter", help="mergedafter:DATE (input DD-MM-YYYY)")
     query_parser.add_argument("--limit", type=int, help="limit:N")
     query_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a table")
+
+    board_parser = subparsers.add_parser("board", help="Print tracked changes from local cache")
+    board_parser.add_argument("--json", action="store_true", help="Emit JSON instead of tables")
+    board_parser.add_argument(
+        "--reload",
+        action="store_true",
+        help="Refresh tracked changes from Gerrit and update cache",
+    )
 
     args = parser.parse_args()
     config_path = Path(args.config)
@@ -980,6 +1046,8 @@ def main() -> None:
 
     if args.command == "query":
         sys.exit(query_run(config, args))
+    if args.command == "board":
+        sys.exit(board_run(config, args))
 
     if args.clear_cache:
         config.cache_path.unlink(missing_ok=True)
