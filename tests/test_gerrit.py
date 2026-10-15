@@ -50,6 +50,47 @@ def test_review_message_preserves_complete_message_as_one_ssh_argument():
     assert result.stdout == f"<review><deadbeef><--message><{message}>"
 
 
+def test_query_operators_passes_one_expression_after_separator():
+    comm = GerritCommunication()
+    comm.ssh_communication.execute_ssh_request = MagicMock(return_value=SshResult(True, duration=0.1, data=""))
+    instance = GerritInstance("prod", "gerrit.example.com", 29418, "tester@example.com")
+
+    result = comm.query_operators(instance, ["is:open", "hashtag:autobump_errors", "-age:1d"])
+
+    assert result == []
+    command = comm.ssh_communication.execute_ssh_request.call_args.args[0]
+    assert command == [
+        "ssh",
+        "-x",
+        "-p",
+        "29418",
+        "gerrit.example.com",
+        "gerrit",
+        "query",
+        "--format=json",
+        "--current-patch-set",
+        "--",
+        "'is:open hashtag:autobump_errors -age:1d'",
+    ]
+    remote_command = " ".join(command[5:])
+    shell_result = subprocess.run(
+        [
+            "sh",
+            "-c",
+            'gerrit() { for argument do printf "<%s>" "$argument"; done; }; eval "$1"',
+            "sh",
+            remote_command,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert shell_result.stdout == (
+        "<query><--format=json><--current-patch-set><--><is:open hashtag:autobump_errors -age:1d>"
+    )
+
+
 @pytest.mark.parametrize(
     ("ssh_message", "expected"),
     [

@@ -157,4 +157,6 @@ class GerritCommunication:
         return self._query(instance, f"owner:{instance.email}", "is:open")
 
     def query_operators(self, instance: GerritInstance, operators: list[str]) -> list[JsonRecord]:
-        return self._query(instance, *operators)
+        if not operators:
+            return self._query(instance)
+        return self._query(instance, "--", _quote_gerrit_argument(" ".join(operators)))
