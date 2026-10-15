@@ -51,6 +51,9 @@ def build_query(args: Mapping, instance_email: str | None) -> list[str]:
     if args.get("project"):
         operators.append(f"project:{_quote(args['project'])}")
 
+    if args.get("hashtag"):
+        operators.append(f"hashtag:{_quote(args['hashtag'])}")
+
     if args.get("mergedafter"):
         operators.append(f"mergedafter:{convert_date(args['mergedafter'])}")
 

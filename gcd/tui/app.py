@@ -1013,6 +1013,7 @@ def main() -> None:
     query_parser.add_argument("--open", action="store_true", help="is:open")
     query_parser.add_argument("--submittable", action="store_true", help="is:submittable")
     query_parser.add_argument("--project", help="project:PATH")
+    query_parser.add_argument("--hashtag", help="hashtag:NAME")
     query_parser.add_argument("--mergedafter", help="mergedafter:DATE (input DD-MM-YYYY)")
     query_parser.add_argument("--limit", type=int, help="limit:N")
     query_parser.add_argument("--json", action="store_true", help="Emit JSON instead of a table")
