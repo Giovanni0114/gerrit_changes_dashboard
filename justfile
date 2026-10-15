@@ -17,3 +17,5 @@ test:
 
 logs:
     tail -f log/ssh.log log/app.log log/plugin.log
+
+mod? queries
