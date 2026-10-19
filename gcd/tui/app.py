@@ -985,7 +985,7 @@ def main() -> None:
     parser.add_argument(
         "-c",
         "--config",
-        default="config.toml",
+        default=Path(__file__).parents[2] / "config.toml",
         help="Path to TOML config file (default: config.toml)",
     )
     parser.add_argument(

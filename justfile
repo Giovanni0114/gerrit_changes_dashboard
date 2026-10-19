@@ -1,6 +1,9 @@
 run:
     uv run gcd
 
+query *args:
+    uv run gcd query {{ args }}
+
 debug:
     LOG_LEVEL=DEBUG uv run gcd
 
