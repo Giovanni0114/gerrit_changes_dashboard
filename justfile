@@ -4,6 +4,12 @@ run:
 query *args:
     uv run gcd query {{ args }}
 
+board:
+    uv run gcd board --reload
+
+board-json *args:
+    uv run gcd board --reload --json
+
 debug:
     LOG_LEVEL=DEBUG uv run gcd
 
