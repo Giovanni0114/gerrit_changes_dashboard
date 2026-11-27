@@ -1,75 +1,4 @@
-# Features 
-
-Here I will add ideas for new features.
-
-Standalone features use numeric ids like `001`, `002` and have a spec under
-`spec/features/001-name/`.
-
-EPICs group related features under a shared goal. An EPIC gets an id like
-`EPIC001` and its spec folder is `spec/features/EPIC001-name/`. Features inside
-the EPIC are numbered `EPIC001-001`, `EPIC001-002`, etc. and live as subfolders
-inside the EPIC folder.
-
----
-
-## EPIC003 | Verification failure comments & analyzer system
-
-When a change has Verified -1/-2 (typically set by Jenkins/CI), the dashboard
-shows a red row but provides no clue about *why* it failed. The user must open
-the Gerrit web UI to read through reviewer comments. This EPIC fetches those
-comments via SSH (`--comments` flag) and runs a configurable analyzer to extract
-actionable failure information for display directly on the dashboard.
-
-Comment format varies across Gerrit organisations, instances and projects. The
-analyzer uses a `Protocol` interface so different strategies can be plugged in.
-This EPIC ships a built-in `PatternAnalyzer` (regex-based). An LLM-based
-analyzer is explicitly deferred to a future EPIC — the Protocol is designed with
-that use case in mind but not implemented here.
-
-### Sub-features
-
-| ID           | Name                                    | Deps            |
-|--------------|-----------------------------------------|-----------------|
-| EPIC003-001  | Fetch Gerrit comments via SSH           | —               |
-| EPIC003-002  | Analyzer Protocol & PatternAnalyzer     | —               |
-| EPIC003-003  | Analyzer configuration in TOML          | —               |
-| EPIC003-004  | Integrate analyzer into refresh cycle   | 001, 002, 003   |
-| EPIC003-005  | Display analyzer report in dashboard    | 004, feature 005|
-| EPIC003-006  | Expose analyzer report over CLI          | 004             |
-
-001, 002, 003 are independent and can be implemented in parallel. 004 is the
-integration point. 005 depends on feature 005 (user comments) being merged
-first. 006 is a leaf task.
-
-Full specs are in `spec/features/EPIC003-verification-comments/` but only on
-`origin/epic/003-verification-comments` branch
-
----
-
-## 028 | Publish Gerrit review messages
-
-Add a TUI review action that publishes the same one-line message to one or more
-tracked changes through Gerrit's SSH `review --message` option. The action uses
-`Space`, `r`, `p`, accepts existing index notation, reports partial failures,
-and does not refresh unrelated change metadata after publishing.
-
-Full spec and test cases in `spec/features/028-review-message/`.
-
----
-
-## 027 | CLI tracked changes board
-
-Add a read-only `gcd board` subcommand that loads every change tracked by the
-TUI from the local SSH cache and prints compact query-style tables without
-making network requests. `--reload` refreshes and persists current Gerrit data;
-`--json` exposes the same ordered results for scripts. Deleted and disabled
-entries remain included because the command represents the complete tracked set.
-
-Full spec and test cases in `spec/features/027-cli-board/`.
-
----
-
-## 026 | Gerrit HTTP connection configuration
+## Gerrit HTTP connection configuration
 
 Add optional per-instance `http_*` settings for future Gerrit REST API clients:
 an explicit base URL, optional basic-auth credentials, request timeout, and TLS
@@ -83,7 +12,7 @@ Full spec in `spec/features/026-gerrit-http-config/spec.md`.
 
 ---
 
-## 015 | Navigation and selecting using arrows
+## Navigation and selecting using arrows
 
 If the arrow is used when index is expected:
   - symbol `*` appears next to the first index in list of changes
@@ -101,89 +30,8 @@ If the arrow is used when index is expected:
 
 ---
 
-## 010 | Add spinner and countdown to header
+## Add spinner and countdown to header
 
 Currently header shows just time of refreshed, and this is often misleading. I
-want to add some sort of rich. Spinner to indicate when operations are running
-in the background. Also, current time should be replaced with countdown to next
-planned refresh.
-
----
-
-## 020 | Add url handling to the comments
-
-So if comment contains a link, it should display just hostname
-and generates clickable link just like number is clickable.
-
----
-
-## 021 | After index is specified, chosen row highlights
-
-After idx was specified by user, one or more rows that was selected should highlight.
-
----
-
-## 023 | Gerrit Action Layer
-
-Extract the `_review_*` logic from `app.py` into a new `gcd/core/actions.py`
-module. Each action function returns a typed `ActionResult`
-(success / warning / failure). `app.py` becomes a thin TUI adapter; a future
-CLI (016) can call the same functions directly.
-
-Also fixes two latent bugs from the SSH-communication refactor:
-`query_review_restore` → `review_restore` (wrong method name) and review
-failures silently treated as success (wrong dict key check).
-
-Spec and plan in `spec/features/023-action-layer/`.
-
----
-
-## 024 | High-level behavioural test suite
-
-The codebase has zero committed tests. Add a small, high-value suite that tests
-**WHAT** the app does (state changes, persistence, dispatched actions, parsed
-models), not **HOW** it renders — `display.py` is deliberately excluded. YAGNI:
-~30–35 focused tests across 5 files, stdlib `unittest.mock` only, SSH mocked at
-the `App.gerrit_comm` seam, files under `tmp_path`.
-
-Files: `tests/conftest.py` (fixtures: temp config, `App`, `FakeGerrit`,
-`SpyAppContext`), `test_changes_persistence.py`, `test_app_behaviors.py`,
-`test_input_handler.py`, `test_selection_and_config.py`.
-
-Spec and test cases in `spec/features/024-test-suite/`.
-
----
-
-# Dev Stories
-
----
-
-## 011 | Make a SPIKE for the possibility of layering interface
-
-I would like to be able to create some sort of overlay screen, floating window,
-or some similar effect to show additional information on tab click
-
----
-
-## 014 | SPIKE: Move from MCP to CLI
-
-Key findings:
-- 90% of operations work standalone against `config.toml` + `changes.json`
-  (the TUI auto-reloads on file changes via mtime polling)
-- Existing modules (`gerrit.py`, `config.py`, `changes.py`) are already
-  decoupled from the TUI and can be wired into argparse directly
-- Only `quit` truly needs IPC to the running TUI (and `kill` works for that)
-- A CLI with `--json` output serves both humans and AI assistants better
-  than MCP (composable, debuggable, zero dependencies)
-- Completing EPIC002 (14+ tools, auth, envelope) is far more work for
-  less payoff
-- If live in-process state is ever needed, a Unix socket extension (Option D)
-  can be added later
-
-This SPIKE supersedes EPIC002 — if CLI is built, EPIC002 becomes unnecessary.
-
----
-
-## 016 | Design CLI tool
-
----
+want to add some sort of rich `Spinner` to indicate when operations are running
+in the background. 
